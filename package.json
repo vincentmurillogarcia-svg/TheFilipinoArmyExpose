@@ -1,0 +1,9 @@
+{
+  "name": "sentinel-watchdog",
+  "version": "1.0.0",
+  "description": "Community corruption watchdog platform",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
