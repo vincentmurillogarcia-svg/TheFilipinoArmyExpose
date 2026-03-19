@@ -1,4 +1,5 @@
 [build]
+  command = ""
   publish = "."
 
 [functions]
@@ -9,7 +10,6 @@
   to     = "/.netlify/functions/api/:splat"
   status = 200
 
-# ── Security Headers ──────────────────────────────────────────
 [[headers]]
   for = "/*"
   [headers.values]
@@ -17,9 +17,9 @@
     X-Content-Type-Options     = "nosniff"
     X-XSS-Protection           = "1; mode=block"
     Referrer-Policy            = "strict-origin-when-cross-origin"
-    Permissions-Policy         = "camera=(), microphone=(), geolocation=()"
+    Permissions-Policy          = "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy    = "default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://res.cloudinary.com https://*.cloudinary.com blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.cloudinary.com; frame-ancestors 'none';"
 
-# ── Cache static assets ───────────────────────────────────────
 [[headers]]
   for = "/*.css"
   [headers.values]

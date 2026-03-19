@@ -1,11 +1,9 @@
 {
   "name": "sentinel-watchdog",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Community corruption watchdog platform",
   "type": "module",
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
-    "bcryptjs": "^2.4.3",
-    "dotenv": "^16.0.0"
+    "@supabase/supabase-js": "^2.45.0"
   }
 }
