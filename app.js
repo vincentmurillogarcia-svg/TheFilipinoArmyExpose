@@ -340,12 +340,12 @@ function authTab(name,btn){
   document.querySelectorAll('.auth-pane').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('ap-'+name).classList.add('active');
-  if(name==='register') buildEmojiGrid('reg-emoji-grid','reg-emoji',null,document.getElementById('reg-emoji').value||'👤');
+  if(name==='register') buildEmojiGrid('reg-emoji-grid','ar-emoji',null,(document.getElementById('ar-emoji')||document.getElementById('reg-emoji'))?.value||'👤');
 }
 
 async function doLogin(){
-  const username=document.getElementById('login-user').value.trim();
-  const password=document.getElementById('login-pass').value;
+  const username=(document.getElementById('au-user')||document.getElementById('login-user'))?.value?.trim()||'';
+  const password=(document.getElementById('au-pass')||document.getElementById('login-pass'))?.value||'';
   if(!username||!password){toast('Fill in all fields','err');return;}
   loading(true);
   try{
@@ -363,12 +363,13 @@ async function doLogin(){
 }
 
 async function doRegister(){
-  const username=document.getElementById('reg-user').value.trim();
-  const password=document.getElementById('reg-pass').value;
-  const pass2=document.getElementById('reg-pass2').value;
-  const reason=document.getElementById('reg-reason').value.trim();
-  const realName=document.getElementById('reg-realname').value.trim();
-  const avatarEmoji=document.getElementById('reg-emoji').value||'👤';
+  const gv=(a,b)=>(document.getElementById(a)||document.getElementById(b))?.value||'';
+  const username=gv('ar-user','reg-user').trim();
+  const password=gv('ar-pass','reg-pass');
+  const pass2=gv('ar-pass2','reg-pass2');
+  const reason=gv('ar-reason','reg-reason').trim();
+  const realName=gv('ar-realname','reg-realname').trim();
+  const avatarEmoji=gv('ar-emoji','reg-emoji')||'👤';
   if(!username||!password){toast('Fill in required fields','err');return;}
   if(username.length<3){toast('Username must be 3+ characters','err');return;}
   if(!/^[a-z0-9_.-]+$/i.test(username)){toast('Username: letters, numbers, _ . - only','err');return;}
@@ -461,25 +462,31 @@ async function saveProfile(){
 
 async function changePassword(){
   if(!currentUser)return;
-  const curPw=document.getElementById('set-cur-pw').value;
-  const newPw=document.getElementById('set-new-pw').value;
-  const newPw2=document.getElementById('set-new-pw2').value;
+  // Support both old (set-cur-pw) and new (s-cur-pass) HTML field IDs
+  const gv=(a,b)=>(document.getElementById(a)||document.getElementById(b))?.value||'';
+  const curPw=gv('s-cur-pass','set-cur-pw');
+  const newPw=gv('s-new-pass','set-new-pw');
+  // New settings modal has no confirm field; old modal used set-new-pw2
+  const newPw2=gv('set-new-pw2','s-new-pass'); // fallback to same as newPw if no confirm field
   if(!curPw){toast('Enter current password','err');return;}
   if(!newPw||newPw.length<6){toast('New password must be 6+ chars','err');return;}
-  if(newPw!==newPw2){toast('New passwords do not match','err');return;}
   loading(true);
   try{
     const res=await API.post('auth',{action:'changePassword',username:currentUser.username,password:curPw,newPassword:newPw});
-    if(res.ok){document.getElementById('set-cur-pw').value='';document.getElementById('set-new-pw').value='';document.getElementById('set-new-pw2').value='';toast('Password changed!','ok');}
-    else toast(res.error||'Failed','err');
+    if(res.ok){
+      ['s-cur-pass','s-new-pass','set-cur-pw','set-new-pw','set-new-pw2'].forEach(id=>{
+        const el=document.getElementById(id); if(el)el.value='';
+      });
+      toast('Password changed!','ok');
+    } else toast(res.error||'Failed','err');
   }catch(e){toast('Error','err');}
   loading(false);
 }
 
 async function changeUsername(){
   if(!currentUser)return;
-  const newUname=document.getElementById('set-new-uname').value.trim();
-  const pw=document.getElementById('set-uname-pw').value;
+  const newUname=(document.getElementById('set-new-uname')||document.getElementById('s-new-uname'))?.value?.trim()||'';
+  const pw=(document.getElementById('set-uname-pw')||document.getElementById('s-uname-pw'))?.value||'';
   if(!newUname){toast('Enter new username','err');return;}
   if(!pw){toast('Enter your password','err');return;}
   if(newUname.length<3){toast('Username must be 3+ chars','err');return;}
@@ -487,7 +494,7 @@ async function changeUsername(){
   loading(true);
   try{
     const res=await API.post('auth',{action:'changeUsername',username:currentUser.username,password:pw,newUsername:newUname.toLowerCase()});
-    if(res.ok){currentUser={...currentUser,username:newUname.toLowerCase()};saveUser(currentUser);document.getElementById('set-current-uname').value=currentUser.username;document.getElementById('set-new-uname').value='';document.getElementById('set-uname-pw').value='';toast('Username changed to @'+currentUser.username,'ok');}
+    if(res.ok){currentUser={...currentUser,username:newUname.toLowerCase()};saveUser(currentUser);[document.getElementById('set-current-uname'),document.getElementById('s-current-uname')].forEach(el=>{if(el)el.value=currentUser.username;});document.getElementById('set-new-uname').value='';document.getElementById('set-uname-pw').value='';toast('Username changed to @'+currentUser.username,'ok');}
     else toast(res.error||'Failed','err');
   }catch(e){toast('Error','err');}
   loading(false);
@@ -1378,7 +1385,7 @@ async function devActMain(action){
   if(action==='urgency') data.urgency=document.getElementById('urg-val').value;
   if(action==='lock') data.locked=true;
   if(action==='delete'){if(!confirm('Delete permanently?'))return;}
-  if(action==='editPost'){data.title=document.getElementById('edit-title').value;data.content=document.getElementById('edit-content').value;data.officials=document.getElementById('edit-officials').value;data.location=document.getElementById('edit-location').value;action='editPost';}
+  if(action==='editPost'){const gv=(a,b)=>(document.getElementById(a)||document.getElementById(b))?.value||'';data.title=gv('edit-title','edit-title');data.content=gv('edit-body','edit-content');data.officials=gv('edit-officials-hidden','edit-officials');data.location=gv('edit-location','edit-location');action='editPost';}
   if(action==='claimFull'||action==='claimCo'){const cn=document.getElementById('claim-name').value.trim();if(!cn){toast('Enter claimer name','err');return;}data={id,claimerName:cn};}
   loading(true);
   try{
@@ -1527,10 +1534,10 @@ async function dismissTip(tipId){
 /* ── BROADCAST ── */
 async function devAct(action){
   if(action==='announce'){
-    const t=document.getElementById('ann-t').value.trim(); const c=document.getElementById('ann-c').value.trim();
+    const gv=(a,b)=>(document.getElementById(a)||document.getElementById(b))?.value?.trim()||''; const t=gv('ann-t','ann-title'); const c=gv('ann-c','ann-body');
     if(!t||!c){toast('Title and message required','err');return;}
     loading(true);
-    try{const res=await API.post('admin',{action:'announce',passkey:devPass,data:{title:t,content:c}});if(res.ok){toast('Broadcast sent!','ok');document.getElementById('ann-t').value='';document.getElementById('ann-c').value='';await loadData();renderAnnPreview();}else toast(res.error||'Failed','err');}
+    try{const res=await API.post('admin',{action:'announce',passkey:devPass,data:{title:t,content:c}});if(res.ok){toast('Broadcast sent!','ok');['ann-t','ann-c','ann-title','ann-body'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});await loadData();renderAnnPreview();}else toast(res.error||'Failed','err');}
     catch(e){toast('Error','err');} loading(false);
   } else if(action==='clearAnn'){
     if(!confirm('Clear all announcements?'))return;
