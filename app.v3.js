@@ -1290,6 +1290,8 @@ function openDevPanel(){
   document.querySelectorAll('.modal-dev .staff-tab').forEach((b,i)=>{
     b.classList.toggle('active',i===0);
   });
+  // CRITICAL: actually open the modal overlay
+  open_('m-dev');
 }
 function devTab(name,btn){
   // Top-level dev panel tab switcher (accounts / posts / system)
@@ -1961,7 +1963,12 @@ function updateBreakingBanner(){
   const urgent=S.posts.find(p=>p.urgency==='high'&&p.status==='verified'&&!p.locked);
   if(urgent&&(!dismissed||dismissed!==urgent.id)){
     _breakingPostId=urgent.id;
-    if(title) title.textContent='🚨 '+esc(urgent.title.slice(0,60))+(urgent.title.length>60?'…':'');
+    if(title){
+      // Decode any HTML entities in the title (e.g. &amp; → &)
+      const tmp=document.createElement('textarea');
+      tmp.innerHTML=urgent.title.slice(0,60);
+      title.textContent='🚨 '+tmp.value+(urgent.title.length>60?'…':'');
+    }
     banner.classList.add('show');
   } else {
     banner.classList.remove('show');

@@ -1420,7 +1420,7 @@ body.dark .topnav{
   padding:10px 16px;
   font-size:13px;font-weight:700;
   gap:10px;align-items:center;
-  animation:breakingPulse 2s ease-in-out infinite;
+  flex-wrap:wrap;
 }
 .breaking-banner.show{display:flex}
 .breaking-banner-ico{font-size:18px;flex-shrink:0;animation:breakingBlink .8s ease-in-out infinite}
@@ -1443,14 +1443,14 @@ body.dark .topnav{
 .fab{
   display:none;
   position:fixed;
-  bottom:calc(80px + var(--safe-bottom));
+  bottom:calc(76px + var(--safe-bottom));
   right:16px;
-  z-index:150;
-  width:56px;height:56px;
-  border-radius:16px;
+  z-index:200;
+  width:52px;height:52px;
+  border-radius:14px;
   background:var(--primary);
   color:#fff;border:none;
-  font-size:22px;
+  font-size:20px;
   box-shadow:var(--shadow-red);
   align-items:center;justify-content:center;
   transition:transform .15s,box-shadow .15s;
@@ -2337,6 +2337,9 @@ nav#nav-tabs{display:none}
   .nav-search{max-width:none;flex:1}
   #toasts{bottom:calc(72px + var(--safe-bottom))}
   .back-to-top{bottom:calc(80px + var(--safe-bottom));right:12px}
+  .main-feed{padding-bottom:calc(92px + var(--safe-bottom))}
+  .right-sidebar{display:none}
+  .app-layout{padding-bottom:0}
 }
 
 @media(max-width:600px){
@@ -2354,7 +2357,9 @@ nav#nav-tabs{display:none}
   .post-card.is-verified{border-left:3px solid var(--green)}
   .mbn-lbl{font-size:7px}
   .mbn-ico{font-size:21px}
-  .main-feed{padding:14px 8px}
+  .main-feed{padding:14px 8px 100px}
+  .card-title{font-size:17px}
+  .card-author-name{font-size:13px}
 }
 
 /* ═══════════════════════════════════════════════════════
