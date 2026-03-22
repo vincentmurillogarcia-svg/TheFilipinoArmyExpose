@@ -2286,6 +2286,9 @@ nav#nav-tabs{display:none}
 
 /* ─── REPORT PAGE-SPECIFIC ─────────────────────────────────── */
 .officials-list{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.official-tag{display:inline-flex;align-items:center;gap:5px;background:var(--blue-lt);border:1px solid rgba(29,78,216,.2);color:var(--blue);font-size:12px;font-weight:600;padding:3px 8px;border-radius:20px}
+.official-tag button{background:none;border:none;color:var(--blue);cursor:pointer;font-size:11px;padding:0;line-height:1;opacity:.7}
+.official-tag button:hover{opacity:1}
 .off-chip{
   background:var(--primary-lt);
   border:1px solid rgba(220,38,38,.2);
@@ -2794,8 +2797,35 @@ nav#nav-tabs{display:none}
     <button class="staff-tab" onclick="staffTab('ann',this)">Announcements</button>
     <button class="staff-tab" onclick="staffTab('promo',this)">Promote</button>
   </div>
-  <div class="staff-pane active" id="sp-users"><div style="padding:20px;text-align:center;color:var(--text3)">Loading...</div></div>
-  <div class="staff-pane" id="sp-tips"><div style="padding:20px;text-align:center;color:var(--text3)">Loading...</div></div>
+  <div class="staff-pane active" id="sp-users">
+    <div style="padding:10px 14px 6px;display:flex;gap:8px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Pending Approval</div>
+      <span id="pending-count-badge" style="display:none;background:var(--primary);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px">0</span>
+      <button class="btn btn-ghost btn-xs" style="margin-left:auto" onclick="loadPendingUsersStaff()">↺ Refresh</button>
+    </div>
+    <div id="staff-pending-list" style="padding:14px"><div style="font-size:13px;color:var(--text3);text-align:center;padding:20px">Loading...</div></div>
+    <div style="padding:10px 14px 6px;display:flex;gap:8px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);align-items:center">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Reports</div>
+      <input type="text" class="fi" id="staff-report-search" placeholder="Search reports…" style="flex:1;font-size:12px;padding:5px 8px" oninput="staffRenderReports()">
+      <select class="fs" id="staff-report-filter" style="font-size:12px;padding:5px 8px" onchange="staffRenderReports()">
+        <option value="all">All</option><option value="unverified">Unverified</option><option value="verified">Verified</option><option value="reviewing">Reviewing</option>
+      </select>
+    </div>
+    <div id="staff-reports-list" style="max-height:280px;overflow-y:auto"></div>
+    <div style="padding:10px 14px 6px;display:flex;gap:8px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);align-items:center">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Comments</div>
+      <input type="text" class="fi" id="staff-comment-search" placeholder="Search comments…" style="flex:1;font-size:12px;padding:5px 8px" oninput="staffRenderComments()">
+      <button class="btn btn-ghost btn-xs" onclick="staffLoadComments()">↺</button>
+    </div>
+    <div id="staff-comments-list" style="max-height:200px;overflow-y:auto;padding:8px 14px"></div>
+  </div>
+  <div class="staff-pane" id="sp-tips">
+    <div style="display:flex;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:center">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase">Anonymous Tips</div>
+      <button class="btn btn-ghost btn-xs" style="margin-left:auto" onclick="loadTips()">↺ Refresh</button>
+    </div>
+    <div id="tips-list" style="padding:14px"><div style="font-size:13px;color:var(--text3);text-align:center;padding:20px">Click Refresh to load tips.</div></div>
+  </div>
   <div class="staff-pane" id="sp-ann">
     <div class="fg"><label class="fl">Title</label><input type="text" class="fi" id="ann-title" placeholder="Announcement title"></div>
     <div class="fg"><label class="fl">Content</label><textarea class="ft" id="ann-body" placeholder="Message to community…" style="min-height:80px"></textarea></div>
@@ -2817,14 +2847,135 @@ nav#nav-tabs{display:none}
 <div class="modal modal-dev" style="max-width:640px">
   <div class="mhead dh"><span>⚙️</span><h3>Dev Panel</h3><button class="mclose" onclick="close_('m-dev')">✕</button></div>
   <div class="mbody">
-    <div class="ds">
-      <h4>🔑 Change Passkey</h4>
-      <div class="dev-grid">
-        <div class="fg"><label class="fl">Current</label><input type="password" class="fi" id="pk-old" autocomplete="off" placeholder="Current passkey"></div>
-        <div class="fg"><label class="fl">New (6+ chars)</label><input type="password" class="fi" id="pk-new" autocomplete="off" placeholder="New passkey"></div>
-      </div>
-      <button class="btn btn-dev btn-sm" onclick="devAct('passkey')">🔑 Update Passkey</button>
+    <!-- Dev Panel Tabs -->
+    <div class="staff-tabs" style="margin:-14px -14px 14px">
+      <button class="staff-tab active" onclick="devTab('accounts',this)">👥 Accounts</button>
+      <button class="staff-tab" onclick="devTab('posts',this)">📋 Posts</button>
+      <button class="staff-tab" onclick="devTab('system',this)">⚙️ System</button>
     </div>
+
+    <!-- Accounts Tab -->
+    <div class="staff-pane active" id="dp-accounts">
+      <div class="dev-tabs" style="display:flex;gap:4px;margin-bottom:12px">
+        <button class="dev-tab active btn btn-ghost btn-xs" onclick="accSubTab('pending',this)">Pending <span id="pending-acc-badge" style="background:var(--primary);color:#fff;padding:1px 5px;border-radius:8px;font-size:10px">0</span></button>
+        <button class="dev-tab btn btn-ghost btn-xs" onclick="accSubTab('users',this)">All Users</button>
+      </div>
+      <div id="acc-pane-pending">
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button class="btn btn-ghost btn-xs" onclick="loadPendingUsers()">↺ Refresh</button>
+        </div>
+        <div id="pending-users-list"><div style="font-size:12px;color:var(--text3)">Click Refresh to load.</div></div>
+      </div>
+      <div id="acc-pane-users" style="display:none">
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <input type="text" class="fi" id="users-search" placeholder="Search users…" style="flex:1;font-size:12px;padding:5px 8px" oninput="filterUsersList()">
+          <button class="btn btn-ghost btn-xs" onclick="loadAllUsers()">↺ Load</button>
+        </div>
+        <div id="all-users-list" style="max-height:300px;overflow-y:auto"><div style="font-size:12px;color:var(--text3)">Click Load to fetch users.</div></div>
+      </div>
+    </div>
+
+    <!-- Posts Tab -->
+    <div class="staff-pane" id="dp-posts" style="display:none">
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        <input type="text" class="fi" id="picker-search" placeholder="Search posts…" style="flex:1;font-size:12px;padding:5px 8px" oninput="filterPicker()">
+      </div>
+      <select class="fs" id="main-pick" size="5" style="width:100%;margin-bottom:8px;font-size:12px" onchange="syncPickers()"></select>
+      <div id="pick-meta" style="font-size:11px;font-family:var(--font-mono);color:var(--text3);margin-bottom:10px"></div>
+      <div class="dev-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div class="fg"><label class="fl">Set Status</label>
+          <select class="fs" id="st-val" style="font-size:12px">
+            <option value="unverified">Unverified</option>
+            <option value="reviewing">Reviewing</option>
+            <option value="verified">Verified</option>
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Set Urgency</label>
+          <select class="fs" id="urg-val" style="font-size:12px">
+            <option value="low">Low</option>
+            <option value="med">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-dev btn-xs" onclick="devActMain('status')">✅ Set Status</button>
+        <button class="btn btn-dev btn-xs" onclick="devActMain('urgency')">⚡ Set Urgency</button>
+        <button class="btn btn-dev btn-xs" onclick="devActMain('pin')">📌 Pin</button>
+        <button class="btn btn-dev btn-xs" onclick="devActMain('unpin')">✕ Unpin</button>
+        <button class="btn btn-dev btn-xs" onclick="devActMain('lock')">🔒 Lock</button>
+        <button class="btn btn-danger btn-xs" onclick="devActMain('delete')">🗑 Delete</button>
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Delete Comment</div>
+        <select class="fs" id="cmt-pick" style="width:100%;font-size:12px;margin-bottom:6px"><option>— Select report first —</option></select>
+        <button class="btn btn-danger btn-xs" onclick="devDeleteComment()">🗑 Delete Comment</button>
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Claim Post</div>
+        <div class="fg"><label class="fl">Claimer Name</label><input type="text" class="fi" id="claim-name" placeholder="e.g. SENTINEL STAFF" style="font-size:12px"></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-dev btn-xs" onclick="devActMain('claimFull')">📌 Full Claim</button>
+          <button class="btn btn-ghost btn-xs" onclick="devActMain('claimCo')">🤝 Co-Claim</button>
+        </div>
+      </div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Bulk Actions</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="btn btn-ghost btn-xs" onclick="bulkSelectAll()">All</button>
+          <button class="btn btn-ghost btn-xs" onclick="bulkSelectNone()">None</button>
+          <button class="btn btn-ghost btn-xs" onclick="bulkSelectUnverified()">Unverified</button>
+          <select class="fs" id="bulk-action-sel" style="font-size:12px;padding:4px 6px">
+            <option value="verified">→ Verified</option>
+            <option value="reviewing">→ Reviewing</option>
+            <option value="unverified">→ Unverified</option>
+            <option value="delete">Delete</option>
+          </select>
+          <button class="btn btn-primary btn-xs" onclick="applyBulkAction()">Apply</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+          <input type="text" class="fi" id="bulk-search" placeholder="Filter…" style="flex:1;font-size:11px;padding:4px 7px" oninput="renderBulkList()">
+          <div id="bulk-count" style="font-size:11px;color:var(--text3);white-space:nowrap">0 selected</div>
+        </div>
+        <div id="bulk-post-list" style="max-height:240px;overflow-y:auto"></div>
+        <div id="bulk-pagination" style="display:flex;gap:4px;margin-top:6px;justify-content:center"></div>
+      </div>
+    </div>
+
+    <!-- System Tab -->
+    <div class="staff-pane" id="dp-system" style="display:none">
+      <div class="ds">
+        <h4>🔑 Change Passkey</h4>
+        <div class="dev-grid">
+          <div class="fg"><label class="fl">Current</label><input type="password" class="fi" id="pk-old" autocomplete="off" placeholder="Current passkey"></div>
+          <div class="fg"><label class="fl">New (6+ chars)</label><input type="password" class="fi" id="pk-new" autocomplete="off" placeholder="New passkey"></div>
+        </div>
+        <button class="btn btn-dev btn-sm" onclick="devAct('passkey')">🔑 Update Passkey</button>
+      <div class="ds">
+        <h4>🛠 Maintenance Mode</h4>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px" id="maint-status">Status: ONLINE</div>
+        <div class="fg"><label class="fl">Maintenance Message</label><input type="text" class="fi" id="maint-msg-input" placeholder="e.g. Back soon…" style="font-size:12px"></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-danger btn-xs" onclick="setMaintenance(true)">🔴 Enable</button>
+          <button class="btn btn-dev btn-xs" onclick="setMaintenance(false)">🟢 Disable</button>
+        </div>
+      </div>
+      <div class="ds">
+        <h4>📊 Stats</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;font-size:12px">
+          <div style="background:var(--bg);border-radius:6px;padding:8px"><div style="font-size:18px;font-weight:800" id="ds-total">—</div><div style="color:var(--text3)">Posts</div></div>
+          <div style="background:var(--bg);border-radius:6px;padding:8px"><div style="font-size:18px;font-weight:800" id="ds-verified">—</div><div style="color:var(--text3)">Verified</div></div>
+          <div style="background:var(--bg);border-radius:6px;padding:8px"><div style="font-size:18px;font-weight:800" id="ds-pending-acc">—</div><div style="color:var(--text3)">Pending</div></div>
+        </div>
+      </div>
+      <div class="ds">
+        <h4>📜 Activity Log</h4>
+        <button class="btn btn-ghost btn-xs" onclick="loadActivityLog()" style="margin-bottom:8px">↺ Load Log</button>
+        <div id="dev-log" style="max-height:200px;overflow-y:auto;font-family:var(--font-mono);font-size:11px;color:var(--text2);background:var(--bg);border-radius:6px;padding:8px"></div>
+      </div>
+    </div><!-- /dp-system -->
+
+      </div>
     <div class="ds">
       <h4>😀 Customize Reactions</h4>
       <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.5">Emoji shown on every post card. Enter 1–8 emoji separated by spaces. Default: 👍 ❤️ 😮 😡 😢</div>
