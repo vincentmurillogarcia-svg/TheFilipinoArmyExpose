@@ -385,18 +385,23 @@ async function doRegister(){
 
 /* ── WELCOME / PROFILE SETUP ── */
 function openWelcome(){
-  document.getElementById('welcome-dname').value=currentUser.displayName||'';
-  document.getElementById('welcome-bio').value=currentUser.bio||'';
+  // Support both old (welcome-dname) and new (w-name) HTML field IDs
+  const sv=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};
+  sv('welcome-dname',currentUser.displayName||''); sv('w-name',currentUser.displayName||'');
+  sv('welcome-bio',currentUser.bio||''); sv('w-bio',currentUser.bio||'');
   buildEmojiGrid('welcome-emoji-grid','welcome-emoji','welcome-av-preview',currentUser.avatarEmoji||'👤');
+  buildEmojiGrid('w-emoji-grid','w-emoji','w-av-preview',currentUser.avatarEmoji||'👤');
   buildColorSwatches('welcome-colors','welcome-color',currentUser.bannerColor||'#0d4a6b');
+  buildColorSwatches('w-color-swatches','w-banner-color',currentUser.bannerColor||'#0d4a6b');
   open_('m-welcome');
 }
 
 async function saveWelcome(){
-  const dname=document.getElementById('welcome-dname').value.trim();
-  const bio=document.getElementById('welcome-bio').value.trim();
-  const avatarEmoji=document.getElementById('welcome-emoji').value;
-  const bannerColor=document.getElementById('welcome-color').value;
+  const gv=(ids,fb='')=>{for(const id of ids){const el=document.getElementById(id);if(el&&el.value!==undefined)return el.value.trim();}return fb;};
+  const dname=gv(['w-name','welcome-dname'])||currentUser?.displayName||'';
+  const bio=gv(['w-bio','welcome-bio']);
+  const avatarEmoji=gv(['w-emoji','welcome-emoji'])||currentUser?.avatarEmoji||'👤';
+  const bannerColor=gv(['w-banner-color','welcome-color'])||currentUser?.bannerColor||'#0d4a6b';
   const avatarUrl=_avatarImageCache['welcome']||'';
   loading(true);
   try{
@@ -785,12 +790,12 @@ function renderTrendingWidget(){
   const sorted=Object.entries(tagCounts).sort((a,b)=>b[1]-a[1]).slice(0,5);
   if(!sorted.length){el.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3)">No tags yet</div>';return;}
   el.innerHTML=sorted.map(([tag,count],i)=>`<div class="trending-item" onclick="setTagFilter('#${esc(tag)}')">
-    <div class="trend-rank r${i<3?i+1:0}">${i+1}</div>
-    <div class="trend-info">
-      <div class="trend-name">#${esc(tag)}</div>
-      <div class="trend-count">${count} report${count!==1?'s':''}</div>
+    <div class="ti-rank${i<3?' top':''}">${i+1}</div>
+    <div class="ti-body">
+      <div class="ti-tag">#${esc(tag)}</div>
+      <div class="ti-count">${count} report${count!==1?'s':''}</div>
     </div>
-    ${i===0?'<span class="trend-hot">HOT</span>':''}
+    ${i===0?'<span style="font-size:9px;font-weight:800;color:var(--primary);font-family:var(--font-mono);letter-spacing:.05em;border:1px solid var(--primary-glow);padding:2px 6px;border-radius:8px">HOT</span>':''}
   </div>`).join('');
 }
 
@@ -800,15 +805,21 @@ function renderTopReportersWidget(){
   S.posts.forEach(p=>{if(p.authorUsername&&!p.anonymous) counts[p.authorUsername]=(counts[p.authorUsername]||0)+1;});
   const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,4);
   if(!sorted.length){el.innerHTML='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text3)">No reporters yet</div>';return;}
-  const avClasses=['ra1','ra2','ra3','ra4'];
+  const avGrads=['linear-gradient(135deg,#f093fb,#f5576c)','linear-gradient(135deg,#4facfe,#00f2fe)','linear-gradient(135deg,#43e97b,#38f9d7)','linear-gradient(135deg,#fa709a,#fee140)'];
   el.innerHTML=sorted.map(([uname,count],i)=>{
     const post=S.posts.find(p=>p.authorUsername===uname);
     const name=post?.displayName||uname;
     const initial=name ? name[0].toUpperCase() : '?';
-    return `<div class="reporter-item" onclick="openProfile('${esc(uname)}')">
-      <div class="rep-av ${avClasses[i%4]}">${initial}<div class="rep-verified-ring">✓</div></div>
-      <div class="rep-info"><div class="rep-name">${esc(name)}</div><div class="rep-sub">${count} report${count!==1?'s':''}</div></div>
-      <button class="follow-btn" onclick="event.stopPropagation();toast('Follow feature coming soon','')">Follow</button>
+    return `<div class="top-reporter-item" onclick="openProfile('${esc(uname)}')">
+      <div class="tr-av" style="background:${avGrads[i%4]};position:relative">
+        ${initial}
+        <div style="position:absolute;bottom:-3px;right:-3px;width:14px;height:14px;background:var(--green);border-radius:50%;border:2px solid var(--surface);display:flex;align-items:center;justify-content:center;font-size:7px;color:#fff;font-weight:800">✓</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="tr-name">${esc(name)}</div>
+        <div class="tr-count">${count} report${count!==1?'s':''}</div>
+      </div>
+      <button style="font-size:11px;font-weight:700;padding:4px 10px;border:1.5px solid var(--border2);border-radius:20px;background:none;color:var(--text2);cursor:pointer;flex-shrink:0;transition:all .15s" onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'" onclick="event.stopPropagation();toast('Follow feature coming soon','')">Follow</button>
     </div>`;
   }).join('');
 }
@@ -1238,11 +1249,11 @@ function devLogout(){
   toast('Developer session ended','dev','⬡');
 }
 async function devLogin(){
-  const p=document.getElementById('dpass').value;
+  const p=(document.getElementById('d-pass')||document.getElementById('dpass'))?.value||'';
   loading(true);
   try{
     const res=await API.post('admin',{action:'getLog',passkey:p,data:{}});
-    if(res.ok){devPass=p;devAuthed=true;close_('m-dlogin');document.getElementById('dpass').value='';openDevPanel();}
+    if(res.ok){devPass=p;devAuthed=true;close_('m-dlogin');[document.getElementById('d-pass'),document.getElementById('dpass')].forEach(el=>{if(el)el.value=''});openDevPanel();}
     else toast('Invalid passkey','err');
   }catch(e){toast('Error','err');}
   loading(false);
@@ -2150,7 +2161,15 @@ async function loadData(){
     render(); checkDeepLink();
     renderTrendingWidget(); renderTopReportersWidget(); renderTagsWidget(); renderStatNumbers();
     renderSidebarCategories();
-  }catch(e){apiErr(true);toast('Failed to load data','err');}
+  }catch(e){
+    apiErr(true);
+    _dataLoaded=true; // clear skeleton state so ghosts don't persist
+    const feed=document.getElementById('feed');
+    if(feed&&!S.posts.length){
+      feed.innerHTML=`<div class="empty"><div class="eico">📡</div><h3>Connection Error</h3><p>Could not reach the server. Check your connection and try again.</p><button class="btn btn-ghost btn-sm" onclick="loadData()">↺ Retry</button></div>`;
+    }
+    toast('Failed to load — check your connection','err');
+  }
   loading(false);
 }
 
