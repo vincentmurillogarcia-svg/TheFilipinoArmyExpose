@@ -2310,93 +2310,87 @@ async function promoteTip(){
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   WINDOW EXPORTS — Every function callable from HTML inline handlers
-   REQUIRED because app.js is a <script type="module"> and module
-   scope is NOT accessible from onclick/oninput/onkeydown attributes.
-   This block is THE fix for every ReferenceError in DevTools.
+   WINDOW EXPORTS — ALL functions callable from HTML event handlers
+   Required because <script type="module"> isolates scope from onclick.
+   This single block eliminates every ReferenceError in DevTools.
    ═══════════════════════════════════════════════════════════════ */
 Object.assign(window, {
-  /* Auth / Session */
+  /* ── Auth / Landing ── */
   landingTab, landingLogin, landingRegister, continueAsGuest,
   authTab, doLogin, doRegister,
-  openAuth, openWelcome, saveWelcome, skipWelcome,
-  showMainApp, logout,
+  openAuth, openWelcome, saveWelcome, skipWelcome, showMainApp, logout,
   toggleUserDropdown, closeUserDropdown,
 
-  /* Profile / Settings */
-  openMyProfile, openProfile,
-  openSettings, saveSettings, saveProfile, changePassword, changeUsername,
+  /* ── Profile / Settings ── */
+  openMyProfile, openProfile, openSettings,
+  saveSettings, saveProfile, changePassword, changeUsername,
   buildEmojiGrid, buildColorSwatches, selectEmoji, selectColor,
   handleAvatarFile, handleAvatarUpload,
 
-  /* Navigation */
+  /* ── Navigation ── */
   sidebarNav, navTabSwitch,
   setTab, setTabByCategory, setSt,
   onSearch, clearSearch, updateSearchClear,
   setTagFilter, onSearchInput, onSearchKey, selectSearchUser,
   loadMore, render,
 
-  /* New Post / Edit */
+  /* ── New Post / Edit ── */
   openNew, setUrg, submitPost,
   openEdit, saveEdit,
   addOfficial, removeOfficial,
   handleMedia, handleMediaFiles,
-  removeMedia, toggleAnonLabel,
-  updateCount, updateReactPreview,
+  removeMedia, toggleAnonLabel, updateCount, updateReactPreview,
 
-  /* Tips */
+  /* ── Tips ── */
   openTip, setTipUrg, submitTip,
 
-  /* Detail / Comments */
+  /* ── Post Detail / Comments ── */
   openDetail, submitComment, staffDeleteComment, flagPost, sharePost,
   onCardTap, toggleReactPanel, doReact,
 
-  /* Notifications */
+  /* ── Notifications ── */
   toggleNotifPanel, closeNotifPanel, clearNotifs, markNotifRead,
 
-  /* Lightbox */
+  /* ── Lightbox ── */
   openLB, closeLB, lbNav,
 
-  /* Modals (generic open/close) */
+  /* ── Modals ── */
   open_, close_,
 
-  /* Theme */
+  /* ── Theme ── */
   toggleTheme, initTheme,
 
-  /* Reactions settings */
+  /* ── Reactions Settings ── */
   saveCustomReactions, resetReactions,
 
-  /* Staff Panel */
+  /* ── Staff Panel ── */
   openStaffPanel, staffTab, staffQuick,
   staffLoadComments, staffRenderComments, staffRenderReports,
-  staffApproveUser, staffRejectUser,
-  loadPendingUsersStaff,
+  staffApproveUser, staffRejectUser, loadPendingUsersStaff,
   postAnnouncement, promoteTip,
 
-  /* Dev Panel */
+  /* ── Dev Panel ── */
   devLogin, devLogout, openDev, openDevPanel, devAct, devActMain,
-  devDeleteComment, devQuick, devTab,
-  accSubTab, loadActivityLog,
-  loadPendingUsers, approveUser, rejectUser,
+  devDeleteComment, devQuick, devTab, accSubTab,
+  loadActivityLog, loadPendingUsers, approveUser, rejectUser,
   loadAllUsers, filterUsersList, setUserRole,
   loadTips, postTip, dismissTip,
   populatePickers, filterPicker, syncPickers,
-  applyBulkAction, bulkSelectAll, bulkSelectNone, bulkSelectUnverified, toggleBulk,
-  renderBulkList,
+  applyBulkAction, bulkSelectAll, bulkSelectNone, bulkSelectUnverified,
+  toggleBulk, renderBulkList,
   addCat, removeCat, resetCats, saveCats,
   addBranch, removeBranch, resetBranches,
-  exportData, setMaintenance,
-  renderAnnPreview,
+  exportData, setMaintenance, renderAnnPreview,
 
-  /* Breaking news banner */
+  /* ── Breaking Banner ── */
   dismissBreakingBanner, breakingBannerClick,
 
-  /* Mobile bottom nav */
+  /* ── Mobile Nav ── */
   mbnSwitch, mbnOpenSort, mbnSetSort, toggleMobileMenu,
 
-  /* Utilities accessible from inline handlers */
-  toast, quickUnpin,
-  openDevPanel_withReactions, syncMobileNotifBadge,
+  /* ── Utilities ── */
+  toast, quickUnpin, syncMobileNotifBadge,
+  openDevPanel_withReactions,
 });
 
 /* Extra direct assignments for safety */
