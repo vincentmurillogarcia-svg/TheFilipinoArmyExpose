@@ -1907,4 +1907,394 @@ initTheme();
 renderNotifBadge();
 loadUserFromStorage();
 loadBranches();
+updateSidebarTheme();
 setInterval(()=>{if(currentUser&&currentUser.role!=='guest')loadData();},60000);
+
+/* ═══════════════════════════════════════
+   MOBILE IMPROVEMENTS
+═══════════════════════════════════════ */
+
+/* ── PERSISTENT SKELETON ── */
+let _dataLoaded = false;
+function showSkeletons(){
+  const feed=document.getElementById('feed'); if(!feed)return;
+  if(!_dataLoaded){
+    feed.innerHTML=[...Array(4)].map(()=>`<div class="skeleton-card mobile-skeleton">
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div class="skel" style="width:44px;height:44px;border-radius:50%;flex-shrink:0"></div>
+      <div style="flex:1"><div class="skel" style="height:14px;width:60%;margin-bottom:7px"></div><div class="skel" style="height:11px;width:40%"></div></div>
+    </div>
+    <div class="skel" style="height:16px;width:85%;margin-bottom:8px"></div>
+    <div class="skel" style="height:13px;width:100%;margin-bottom:5px"></div>
+    <div class="skel" style="height:13px;width:75%"></div>
+  </div>`).join('');
+  }
+}
+function clearSkeletons(){ _dataLoaded = true; }
+
+/* ── LOAD MORE / PAGINATION ── */
+const PAGE_SIZE = 20;
+let _currentPage = 0;
+let _allPosts = [];
+
+function render(){
+  _currentPage = 0;
+  const query=(document.getElementById('search-input')?.value||'').trim().toLowerCase();
+  const sort=document.getElementById('sort-sel')?.value||'newest';
+  let posts=[...S.posts];
+  if(curTab!=='all') posts=posts.filter(p=>p.category===curTab);
+  if(curStatus!=='all') posts=posts.filter(p=>p.status===curStatus);
+  if(query&&!query.startsWith('@')) posts=posts.filter(p=>(p.title+' '+(p.content||'')+' '+(p.author||'')+' '+(p.officials||'')+' '+((p.tags||[]).join(' '))).toLowerCase().includes(query));
+  posts.sort((a,b)=>{
+    if(sort==='votes') return (b.votes||0)-(a.votes||0);
+    if(sort==='comments') return (S.comments.filter(c=>c.postId===b.id).length)-(S.comments.filter(c=>c.postId===a.id).length);
+    if(sort==='urgent'){const uo={high:3,med:2,low:1};return (uo[b.urgency]||0)-(uo[a.urgency]||0);}
+    return new Date(b.timestamp)-new Date(a.timestamp);
+  });
+  const pinned=posts.filter(p=>p.pinned);
+  const unpinned=posts.filter(p=>!p.pinned);
+  _allPosts = [...pinned,...unpinned];
+  _renderPage();
+  updateBreakingBanner();
+}
+
+function _renderPage(){
+  const feed=document.getElementById('feed'); if(!feed)return;
+  const end = (_currentPage + 1) * PAGE_SIZE;
+  const pagePosts = _allPosts.slice(0, end);
+  const q=(document.getElementById('search-input')?.value||'').trim().toLowerCase();
+  let labelHtml='';
+  if(q&&!q.startsWith('@')) labelHtml=`<div class="search-results-label">Showing <span>${pagePosts.length}</span> result${pagePosts.length!==1?'s':''} for "<span>${esc(q)}</span>"</div>`;
+  if(!_allPosts.length){
+    feed.innerHTML=labelHtml+`<div class="empty"><div class="eico">🔍</div><h3>No reports found</h3><p>${q?`No results for "${esc(q)}" — try different keywords`:'No reports match your filters.'}</p>${q?`<button class="btn btn-ghost btn-sm" onclick="clearSearch()">✕ Clear Search</button>`:''}</div>`;
+  } else {
+    feed.innerHTML=labelHtml+pagePosts.map((p,i)=>postCardHtml(p,i)).join('');
+  }
+  const loadMoreBtn=document.getElementById('load-more-btn');
+  if(loadMoreBtn) loadMoreBtn.classList.toggle('show', end < _allPosts.length);
+  const pinNotice=document.getElementById('pin-notice');
+  if(pinNotice) pinNotice.style.display=_allPosts.filter(p=>p.pinned).length?'flex':'none';
+  const statEl=document.getElementById('stat-txt');
+  if(statEl) statEl.innerHTML=`— ${_allPosts.length} reports`;
+}
+
+function loadMore(){
+  _currentPage++;
+  _renderPage();
+  window.scrollBy({top:200,behavior:'smooth'});
+}
+
+/* ── MOBILE SORT ── */
+function mbnOpenSort(){
+  open_('m-mob-sort');
+  const sortVal=document.getElementById('sort-sel')?.value||'newest';
+  document.querySelectorAll('.mob-sort-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.mob-sort-btn').forEach(b=>{
+    if(b.dataset.sort===sortVal) b.classList.add('active');
+  });
+}
+function mbnSetSort(val){
+  document.getElementById('sort-sel').value=val;
+  close_('m-mob-sort');
+  render();
+  const btn=document.getElementById('mbn-sort');
+  if(btn) btn.classList.add('active');
+}
+
+/* ── DARK MODE IN SIDEBAR ── */
+function updateSidebarTheme(){
+  const isDark=document.body.classList.contains('dark');
+  const ico=document.getElementById('snav-theme-ico');
+  const lbl=document.getElementById('snav-theme-lbl');
+  if(ico) ico.textContent=isDark?'☀️':'🌙';
+  if(lbl) lbl.textContent=isDark?'Light Mode':'Dark Mode';
+}
+function toggleTheme(){
+  const d=!document.body.classList.contains('dark');
+  document.body.classList.toggle('dark',d);
+  localStorage.setItem('theme',d?'dark':'light');
+  updateThemeBtn();
+  updateSidebarTheme();
+}
+function updateThemeBtn(){
+  const d=document.body.classList.contains('dark');
+  const btn=document.getElementById('theme-settings-btn');
+  if(btn) btn.textContent=d?'☀️ Light Mode':'🌙 Dark Mode';
+  const navBtn=document.getElementById('theme-btn');
+  if(navBtn) navBtn.textContent=d?'☀️':'🌙';
+}
+
+/* ── SEARCH AUTOCOMPLETE ── */
+let _searchHoverIdx = -1;
+function onSearchInput(){
+  const inp=document.getElementById('search-input');
+  const ac=document.getElementById('search-autocomplete');
+  if(!inp||!ac)return;
+  const val=inp.value.trim();
+  if(!val.startsWith('@')||val.length<2){ac.classList.remove('show');_searchHoverIdx=-1;return;}
+  const q=val.slice(1).toLowerCase();
+  const matches=S.posts
+    .filter(p=>p.authorUsername&&!p.anonymous&&p.authorUsername.toLowerCase().includes(q))
+    .map(p=>({username:p.authorUsername,displayName:p.displayName}))
+    .filter((m,i,arr)=>arr.findIndex(x=>x.username===m.username)===i)
+    .slice(0,6);
+  if(!matches.length){ac.classList.remove('show');_searchHoverIdx=-1;return;}
+  ac.innerHTML=matches.map((m)=>{
+    const initial=(m.displayName||m.username||'?')[0].toUpperCase();
+    return `<div class="sac-item" onclick="selectSearchUser('${esc(m.username)}')">
+      <div class="sac-avatar">${initial}</div>
+      <div><div class="sac-name">${esc(m.displayName||m.username)}</div><div class="sac-uname">@${esc(m.username)}</div></div>
+    </div>`;
+  }).join('');
+  ac.classList.add('show');
+  _searchHoverIdx=-1;
+}
+function onSearchKey(e){
+  const ac=document.getElementById('search-autocomplete');
+  if(!ac||!ac.classList.contains('show')) return;
+  const items=[...ac.querySelectorAll('.sac-item')];
+  if(e.key==='ArrowDown'){e.preventDefault();_searchHoverIdx=Math.min(_searchHoverIdx+1,items.length-1);_highlightSearchItem(items);return;}
+  if(e.key==='ArrowUp'){e.preventDefault();_searchHoverIdx=Math.max(_searchHoverIdx-1,0);_highlightSearchItem(items);return;}
+  if(e.key==='Enter'&&_searchHoverIdx>=0){e.preventDefault();items[_searchHoverIdx]?.click();return;}
+  if(e.key==='Escape'){ac.classList.remove('show');return;}
+}
+function _highlightSearchItem(items){items.forEach((it,i)=>it.classList.toggle('active',i===_searchHoverIdx));}
+function selectSearchUser(username){
+  const inp=document.getElementById('search-input');
+  const ac=document.getElementById('search-autocomplete');
+  if(inp) inp.value='@'+username;
+  if(ac) ac.classList.remove('show');
+  _searchHoverIdx=-1;
+  render();
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.nav-search')){
+    const ac=document.getElementById('search-autocomplete');
+    if(ac) ac.classList.remove('show');
+    _searchHoverIdx=-1;
+  }
+});
+
+/* ── BREAKING NEWS BANNER ── */
+let _breakingPostId = null;
+function updateBreakingBanner(){
+  const banner=document.getElementById('breaking-banner');
+  const title=document.getElementById('breaking-title');
+  if(!banner)return;
+  const dismissed=sessionStorage.getItem('breaking_dismissed');
+  const urgent=S.posts.find(p=>p.urgency==='high'&&p.status==='verified'&&!p.locked);
+  if(urgent&&(!dismissed||dismissed!==urgent.id)){
+    _breakingPostId=urgent.id;
+    if(title) title.textContent='🚨 '+esc(urgent.title.slice(0,60))+(urgent.title.length>60?'…':'');
+    banner.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+    _breakingPostId=null;
+  }
+}
+function dismissBreakingBanner(){
+  const banner=document.getElementById('breaking-banner');
+  if(banner) banner.classList.remove('show');
+  if(_breakingPostId) sessionStorage.setItem('breaking_dismissed',_breakingPostId);
+}
+function breakingBannerClick(){
+  if(_breakingPostId) openDetail(_breakingPostId);
+}
+
+/* ── REPORT / FLAG ── */
+async function flagPost(postId){
+  if(!currentUser||currentUser.role==='guest'){toast('Login to report','err');openAuth();return;}
+  const reason=window.prompt('Why are you reporting this? (optional — press OK to submit)');
+  loading(true);
+  try{
+    await API.post('flag',{id:postId,reason:reason||''});
+    toast('Report submitted. Staff will review.','ok');
+  }catch(e){toast('Error reporting post','err');}
+  loading(false);
+}
+
+/* ── MEDIA UPLOAD LIMITS (5 per post) ── */
+const MAX_MEDIA = 5;
+async function handleMedia(input){
+  const files=Array.from(input.files||[]);
+  const remaining = MAX_MEDIA - mediaFiles.length;
+  if(remaining<=0){toast(`Max ${MAX_MEDIA} files per post`,'err');input.value='';return;}
+  const toUpload = files.slice(0, remaining);
+  if(files.length>remaining) toast(`${files.length-remaining} file(s) skipped — max ${MAX_MEDIA}`,'err');
+  for(const file of toUpload){
+    if(file.size>10*1024*1024){toast('Max 10MB per file','err');continue;}
+    if(file.type.startsWith('image/')){
+      toast('Uploading…','');
+      try{
+        const fd=new FormData(); fd.append('file',file); fd.append('upload_preset',CLOUDINARY_MEDIA_PRESET);
+        const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,{method:'POST',body:fd});
+        const data=await res.json();
+        if(!data.secure_url) throw new Error('Upload failed');
+        mediaFiles.push({type:'image',url:data.secure_url});
+        toast(`Uploaded (${mediaFiles.length}/${MAX_MEDIA})`,'ok');
+      }catch(e){toast('Upload failed','err');}
+    } else if(file.type.startsWith('audio/')){
+      const b64=await toBase64(file);
+      mediaFiles.push({type:'audio',data:b64});
+      toast(`Audio (${mediaFiles.length}/${MAX_MEDIA})`,'ok');
+    }
+  }
+  renderPreviews(); input.value='';
+}
+
+/* ── LIGHTBOX: gallery is already wired via openLB/lbNav ── */
+
+/* ── CARD ACTIONS HTML HELPERS ── */
+function _getCardActionsHtml(p){
+  const isStaff=canModerate(currentUser?.role);
+  const isDev=isDevRole(currentUser?.role);
+  return `<div class="card-staff-actions">
+    ${isStaff||isDev?`<button class="staff-qbtn sqb-verify" onclick="staffQuick('${esc(p.id)}','verify')">✅</button>
+    <button class="staff-qbtn sqb-review" onclick="staffQuick('${esc(p.id)}','review')">🔍</button>
+    <button class="staff-qbtn sqb-unverify" onclick="staffQuick('${esc(p.id)}','unverify')">◈</button>`:''}
+    ${isDev?`<button class="staff-qbtn sqb-pin" onclick="staffQuick('${esc(p.id)}','${p.pinned?'unpin':'pin'}')">${p.pinned?'✕':'📌'}</button>`:''}
+    ${isDev?`<button class="staff-qbtn sqb-delete" onclick="if(confirm('Delete?'))staffQuick('${esc(p.id)}','delete')">🗑</button>`:''}
+  </div>`;
+}
+function _getDqmHtml(p){
+  const isStaff=canModerate(currentUser?.role);
+  const isDev=isDevRole(currentUser?.role);
+  const isOwn=currentUser&&p.authorUsername&&p.authorUsername===currentUser.username;
+  return `
+    ${isStaff||isDev?`<div class="dqm-item" onclick="event.stopPropagation();staffQuick('${esc(p.id)}','verify')">✅ Verify</div>
+    <div class="dqm-item" onclick="event.stopPropagation();staffQuick('${esc(p.id)}','review')">🔍 Under Review</div>
+    <div class="dqm-item" onclick="event.stopPropagation();staffQuick('${esc(p.id)}','unverify')">◈ Unverify</div>`:''}
+    ${currentUser&&currentUser.role!=='guest'&&!isOwn?`<div class="dqm-item dqm-flag" onclick="event.stopPropagation();flagPost('${esc(p.id)}')">🚨 Report</div>`:''}
+    ${isDev?`<div class="dqm-sep"></div>
+    <div class="dqm-item" onclick="event.stopPropagation();devQuick('${esc(p.id)}','${p.pinned?'unpin':'pin'}')">${p.pinned?'✕ Unpin':'📌 Pin'}</div>
+    <div class="dqm-item" onclick="event.stopPropagation();devQuick('${esc(p.id)}','${p.locked?'unlock':'lock'}')">${p.locked?'🔓 Unlock':'🔒 Lock'}</div>
+    <div class="dqm-sep"></div>
+    <div class="dqm-item" style="color:var(--primary)" onclick="event.stopPropagation();if(confirm('Delete?'))devQuick('${esc(p.id)}','delete')">🗑 Delete</div>`:''}
+    ${isOwn?`${isStaff||isDev?'<div class="dqm-sep"></div>':''}
+    <div class="dqm-item" onclick="event.stopPropagation();openDetail('${esc(p.id)}')">✏️ Edit</div>`:''}
+  `;
+}
+
+/* ── POST CARD HTML (UPDATED with report button + lightbox) ── */
+function postCardHtml(p,idx){
+  const cmtCount=S.comments.filter(c=>c.postId===p.id).length;
+  const authorDisplay=p.anonymous?'Anonymous':(p.displayName||p.author||'Anonymous');
+  const hasUsername=!p.anonymous&&p.authorUsername;
+  const isOwn=currentUser&&hasUsername&&p.authorUsername===currentUser.username;
+  const avClass=AV_CLASSES[Math.abs((p.authorUsername||'').charCodeAt(0)||0)%AV_CLASSES.length];
+  const mediaItems=(p.media||[]).slice(0,4);
+  const mediaHtml=mediaItems.length?`<div class="media-strip">${mediaItems.map((m,i)=>{
+    const extra=(p.media.length>4&&i===3)?`<div class="mmore">+${p.media.length-4}</div>`:'';
+    const allImgs=(p.media||[]).filter(mm=>mm.type==='image').map(mm=>mm.data||mm.url||'');
+    if(m.type==='image'){const src=m.data||m.url||'';return`<div class="mthumb" onclick="openLB('${src}',${JSON.stringify(allImgs)})"><img src="${src}" alt=""></div>${extra}`;}
+    if(m.type==='audio')return`<div class="mthumb"><div class="mico"><span>🎵</span><span>AUDIO</span></div>${extra}</div>`;
+    return'';
+  }).join('')}</div>`:'';
+  const tagsHtml=(p.tags&&p.tags.length)?`<div class="card-tags">${p.tags.map(t=>`<span class="tag" onclick="event.stopPropagation();document.getElementById('search-input').value='${esc(t)}';updateSearchClear();render()">#${esc(t)}</span>`).join('')}</div>`:'';
+  const staffBadge=p.fromTip?'<span class="staff-post-badge">STAFF</span>':'';
+  const coClaimBadge=p.coClaimed?`<span class="coclaim-badge">via ${esc(p.coClaimedBy)}</span>`:'';
+  const editedBadge=p.editedByAdmin?'<span class="edited-badge">[EDITED]</span>':'';
+  const classes=['post-card',p.pinned?'is-pinned':'',p.urgency==='high'?'is-urgent':'',p.status==='verified'?'is-verified':'',p.locked?'is-locked':''].filter(Boolean).join(' ');
+  const totalReactions=REACTIONS.reduce((sum,e)=>sum+getReactionCount(p.id,e),0);
+  const reactionSummaryHtml=totalReactions>0?`<div class="reaction-summary"><div class="reaction-icons">${REACTIONS.filter(e=>getReactionCount(p.id,e)>0).slice(0,3).map(e=>`<div class="reaction-ico">${esc(e)}</div>`).join('')}</div><span>${totalReactions}</span></div>`:'<div></div>';
+  const commentCountHtml=cmtCount>0?`<div class="comment-count-link" onclick="openDetail('${esc(p.id)}')">${cmtCount} 💬</div>`:'<div></div>';
+  const isStaff=canModerate(currentUser?.role);
+  const isDev=isDevRole(currentUser?.role);
+  const userReact=getUserReaction(p.id);
+  const initial=authorDisplay[0]||'?';
+
+  const topComment=S.comments.find(c=>c.postId===p.id);
+  const topCommentHtml=topComment?`<div class="card-top-comment">
+    <div class="comment-item-inline">
+      <div class="ci-av-sm">${esc(topComment.avatarEmoji||'👤')}</div>
+      <div class="ci-bubble">
+        <div class="ci-author">${esc(topComment.displayName||topComment.author||'Anonymous')}</div>
+        <div class="ci-text">${esc((topComment.text||'').slice(0,100))}${topComment.text&&topComment.text.length>100?'…':''}</div>
+      </div>
+    </div>
+    ${canPost(currentUser?.role)?`<div class="comment-input-wrap">
+      <div class="composer-av" style="width:32px;height:32px;font-size:14px">${esc(currentUser?.avatarEmoji||'👤')}</div>
+      <div class="comment-input-inline" onclick="openDetail('${esc(p.id)}')" style="cursor:pointer">Write a comment…</div>
+    </div>`:''}
+  </div>`:'';
+
+  return `<div class="${classes}" onclick="onCardTap('${esc(p.id)}',event)">
+    <div class="card-header">
+      <div class="card-author-av ${esc(avClass)}" onclick="event.stopPropagation();${hasUsername?`openProfile('${esc(p.authorUsername)}')`:''}">
+        ${p.status==='verified'?'<div class="card-verified-ring">✓</div>':''}
+        ${esc(initial)}
+      </div>
+      <div class="card-author-info">
+        <div class="card-author-row">
+          <span class="card-author-name" onclick="event.stopPropagation();${hasUsername?`openProfile('${esc(p.authorUsername)}')`:''}">${esc(authorDisplay)}</span>
+          ${p.status==='verified'?'<span class="card-role-badge rb-verified">✅</span>':''}
+          ${p.urgency==='high'?'<span class="card-role-badge rb-urgent">🚨</span>':''}
+          ${p.pinned?'<span class="card-role-badge rb-pinned">📌</span>':''}
+          ${staffBadge}${coClaimBadge}
+        </div>
+        <div class="card-post-meta">
+          <span>${catLabel(p.category)}</span><span class="card-meta-dot"></span><span>${ago(p.timestamp)}</span>
+          ${p.location?`<span class="card-meta-dot"></span><span class="card-meta-loc" onclick="event.stopPropagation();document.getElementById('search-input').value='${esc(p.location)}';updateSearchClear();render()">${esc(p.location)}</span>`:''}
+          ${p.locked?'<span class="lock-badge">🔒</span>':''}${editedBadge}
+        </div>
+      </div>
+  ${isOwn||isStaff||isDev||(currentUser&&currentUser.role!=='guest')?`<div style="position:relative;flex-shrink:0">
+        <button class="card-more-btn" onclick="event.stopPropagation();toggleDevMenu('${esc(p.id)}',this)">•••</button>
+        <div class="dev-quick-menu" id="dqm-${CSS.escape(p.id)}">${_getDqmHtml(p)}</div>
+      </div>`:''}
+    </div>
+    <div class="card-body">
+      <div class="card-category-label">${catLabel(p.category)} ${urgencyHtml(p.urgency)} ${statusHtml(p.status)}</div>
+      <div class="card-title" onclick="event.stopPropagation();openDetail('${esc(p.id)}')">${esc(p.title)}</div>
+      ${p.officials?`<div class="off-line">👤 ${esc(p.officials)}</div>`:''}
+      <div class="card-excerpt">${esc(p.content)}</div>
+      ${tagsHtml}${mediaHtml}
+    </div>
+    ${_getCardActionsHtml(p)}
+    <div class="card-engagement">
+      ${reactionSummaryHtml}
+      ${commentCountHtml}
+    </div>
+    <div class="card-actions">
+      <button class="card-action-btn${userReact?' btn-reacted':''}" onclick="event.stopPropagation();toggleReactPanel('${esc(p.id)}')">
+        <span class="btn-ico">${userReact?esc(userReact):'👍'}</span> ${userReact?'Reacted':'React'}
+      </button>
+      <button class="card-action-btn" onclick="event.stopPropagation();openDetail('${esc(p.id)}')">
+        <span class="btn-ico">💬</span> Comment
+      </button>
+      <button class="card-action-btn" onclick="event.stopPropagation();sharePost('${esc(p.id)}')">
+        <span class="btn-ico">↗</span> Share
+      </button>
+    </div>
+    <div class="reaction-btns" id="react-panel-${CSS.escape(p.id)}" style="display:none" data-reaction-bar="${CSS.escape(p.id)}">
+      ${reactionBarHtml(p.id)}
+    </div>
+    ${topCommentHtml}
+  </div>`;
+}
+
+/* ── LOAD DATA: with clear skeletons ── */
+async function loadData(){
+  _dataLoaded = false;
+  showSkeletons(); loading(true);
+  try{
+    const d=await API.get('data');
+    apiErr(false);
+    if(d.maintenance){
+      document.getElementById('maint-screen').classList.add('show');
+      document.getElementById('maint-msg').textContent=d.maintenanceMsg||'System under maintenance.';
+      loading(false); return;
+    }
+    document.getElementById('maint-screen').classList.remove('show');
+    S.posts=d.posts||[]; S.comments=d.comments||[]; S.announcements=d.announcements||[];
+    S.categories=d.categories||[]; S.reactions=d.reactions||{};
+    if(d.customReactions&&d.customReactions.length) REACTIONS=d.customReactions;
+    checkSmartNotifs(S.posts,S.comments,S.announcements,S.reactions);
+    renderTabs(); renderAnnouncements();
+    clearSkeletons();
+    render(); checkDeepLink();
+    renderTrendingWidget(); renderTopReportersWidget(); renderTagsWidget(); renderStatNumbers();
+    renderSidebarCategories();
+  }catch(e){apiErr(true);toast('Failed to load data','err');}
+  loading(false);
+}

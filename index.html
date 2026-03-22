@@ -147,6 +147,8 @@ button{font-family:inherit;cursor:pointer}
 .sidebar-divider{height:1px;background:var(--border);margin:8px 8px}
 .sidebar-section-lbl{font-size:11px;font-weight:700;color:var(--text3);padding:5px 8px 3px;text-transform:uppercase;letter-spacing:.06em}
 .sidebar-nav-item{display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px;cursor:pointer;transition:all .15s;color:var(--text1);font-size:15px;font-weight:600;border:none;background:none;width:100%;text-align:left}
+.sidebar-nav-item .snav-ico+.snav-lbl{flex:1}
+.snav-lbl{font-size:15px;font-weight:600;color:var(--text1)}
 .sidebar-nav-item:hover{background:var(--border)}
 .sidebar-nav-item.active{background:var(--primary-lt);color:var(--primary)}
 .sidebar-nav-item.active .snav-ico{background:var(--primary);color:#fff}
@@ -190,7 +192,7 @@ button{font-family:inherit;cursor:pointer}
 .post-card:hover{box-shadow:var(--shadow)}
 .post-card.is-pinned{border-top:3px solid var(--gold)}
 .post-card.is-urgent{border-top:3px solid var(--primary)}
-.post-card.is-verified{border-top:3px solid var(--green)}
+.post-card.is-verified{border-top:3px solid var(--green);border-left:4px solid var(--green)}
 .post-card.is-locked{opacity:.85}
 #feed .post-card:nth-child(1){animation-delay:.04s}
 #feed .post-card:nth-child(2){animation-delay:.08s}
@@ -608,18 +610,19 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
   display:none;position:fixed;bottom:0;left:0;right:0;z-index:350;
   background:var(--surface);border-top:1px solid var(--border);
   padding:0 0 env(safe-area-inset-bottom,0);
-  box-shadow:0 -2px 12px rgba(0,0,0,.08);
+  box-shadow:0 -4px 20px rgba(0,0,0,.12);
 }
-.mbn-inner{display:flex;align-items:stretch;height:54px}
-.mbn-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:none;border:none;color:var(--text3);font-size:10px;gap:2px;padding:6px 4px;cursor:pointer;transition:color .15s;position:relative;min-width:0}
-.mbn-btn span.mbn-ico{font-size:20px;line-height:1}
-.mbn-btn span.mbn-lbl{font-size:9px;font-family:'JetBrains Mono',monospace;font-weight:600;letter-spacing:.3px;white-space:nowrap}
+.mbn-inner{display:flex;align-items:stretch;height:56px}
+.mbn-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:none;border:none;color:var(--text3);font-size:10px;gap:2px;padding:6px 4px;cursor:pointer;transition:color .15s;position:relative;min-width:0;-webkit-tap-highlight-color:transparent}
+.mbn-btn span.mbn-ico{font-size:22px;line-height:1}
+.mbn-btn span.mbn-lbl{font-size:8px;font-family:'JetBrains Mono',monospace;font-weight:600;letter-spacing:.3px;white-space:nowrap}
 .mbn-btn.active,.mbn-btn:active{color:var(--primary)}
-.mbn-btn .mbn-badge{position:absolute;top:6px;right:calc(50% - 12px);background:var(--primary);color:#fff;font-size:9px;font-family:'JetBrains Mono',monospace;min-width:16px;height:16px;border-radius:8px;display:none;align-items:center;justify-content:center;padding:0 3px}
+.mbn-btn .mbn-badge{position:absolute;top:4px;right:calc(50% - 14px);background:var(--primary);color:#fff;font-size:8px;font-family:'JetBrains Mono',monospace;min-width:16px;height:16px;border-radius:8px;display:none;align-items:center;justify-content:center;padding:0 3px;border:1.5px solid var(--surface)}
 .mbn-btn .mbn-badge.show{display:flex}
 .mbn-add-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:none;border:none;padding:6px 4px;cursor:pointer;position:relative}
-.mbn-add-inner{width:42px;height:42px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;box-shadow:0 2px 12px var(--primary-glow);transition:transform .15s}
+.mbn-add-inner{width:46px;height:46px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;box-shadow:0 4px 16px var(--primary-glow);transition:transform .15s}
 .mbn-add-inner:active{transform:scale(.93)}
+.mbn-divider{width:1px;background:var(--border);margin:8px 0}
 /* ─── RESPONSIVE ─── */
 @media(max-width:1100px){.right-sidebar{display:none}}
 @media(max-width:780px){
@@ -635,6 +638,41 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
   .modal{border-radius:12px 12px 0 0}
   .overlay{padding:0}
 }
+/* ─── MOBILE SORT SHEET ─── */
+.mob-sort-btn{width:100%;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:15px;font-weight:600;color:var(--text1);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:10px;margin-bottom:8px;text-align:left}
+.mob-sort-btn:hover{background:var(--primary-lt);border-color:var(--primary);color:var(--primary)}
+.mob-sort-btn.active{background:var(--primary-lt);border-color:var(--primary);color:var(--primary)}
+/* ─── SEARCH AUTOCOMPLETE ─── */
+.search-autocomplete{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);z-index:500;max-height:240px;overflow-y:auto;display:none}
+.search-autocomplete.show{display:block}
+.sac-item{padding:10px 14px;cursor:pointer;font-size:14px;transition:background .1s;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)}
+.sac-item:last-child{border-bottom:none}
+.sac-item:hover,.sac-item.active{background:var(--bg)}
+.sac-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--gold));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.sac-name{font-weight:600;color:var(--text1)}
+.sac-uname{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)}
+/* ─── BREAKING NEWS BANNER ─── */
+.breaking-banner{display:none;position:sticky;top:var(--top-h);z-index:250;background:linear-gradient(135deg,var(--primary),#c62d22);color:#fff;padding:10px 16px;font-size:13px;font-weight:600;gap:10px;align-items:center;animation:breakingPulse 2s ease-in-out infinite}
+.breaking-banner.show{display:flex}
+.breaking-banner-ico{font-size:18px;flex-shrink:0;animation:breakingBlink .8s ease-in-out infinite}
+@keyframes breakingPulse{0%,100%{opacity:1}50%{opacity:.92}}
+@keyframes breakingBlink{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+.breaking-banner-title{flex:1;font-weight:700}
+.breaking-banner-link{font-size:12px;color:rgba(255,255,255,.8);cursor:pointer;white-space:nowrap;flex-shrink:0}
+.breaking-banner-link:hover{color:#fff;text-decoration:underline}
+.breaking-banner-dismiss{background:rgba(255,255,255,.2);border:none;color:#fff;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.breaking-banner-dismiss:hover{background:rgba(255,255,255,.35)}
+/* ─── REPORT FLAG ─── */
+.dqm-item.dqm-flag{color:var(--amber)}
+.dqm-item.dqm-flag:hover{background:rgba(212,115,10,.08)}
+/* ─── MEDIA LIMIT COUNTER ─── */
+.media-limit-msg{font-size:11px;color:var(--text3);margin-top:4px;text-align:center}
+/* ─── LOAD MORE ─── */
+.load-more-btn{width:100%;padding:14px;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-weight:700;color:var(--primary);cursor:pointer;transition:all .15s;margin-top:8px;display:none}
+.load-more-btn:hover{background:var(--primary-lt);border-color:var(--primary)}
+.load-more-btn.show{display:block}
+/* ─── SKELETON PERSIST ─── */
+.skeleton-card.mobile-skeleton{animation:shimmer 1.6s ease-in-out infinite}
 @media(max-width:600px){
   .landing-left{display:none}
   .landing-right{width:100%;padding:24px 16px}
@@ -647,6 +685,9 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
   .modal-dev,.modal-staff{max-height:95vh}
   .card-actions{gap:0}
   .card-action-btn{font-size:12px;padding:8px 6px}
+  .post-card.is-verified{border-left:4px solid var(--green)}
+  .mbn-btn span.mbn-lbl{font-size:7px}
+  .mbn-btn span.mbn-ico{font-size:20px}
 }
 </style>
 </head>
@@ -717,8 +758,9 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
   </a>
   <div class="nav-search">
     <span class="nav-search-ico">🔍</span>
-    <input type="text" id="search-input" placeholder="Search reports, @username…" oninput="onSearch();updateSearchClear()">
+    <input type="text" id="search-input" placeholder="Search, @user…" oninput="onSearch();updateSearchClear();onSearchInput()" onkeydown="onSearchKey(event)" autocomplete="off">
     <button class="search-clear-btn" id="search-clear" onclick="clearSearch()" title="Clear">✕</button>
+    <div class="search-autocomplete" id="search-autocomplete"></div>
   </div>
   <div class="nav-center">
     <button class="nav-tab-btn active" id="ntab-home" onclick="navTabSwitch('home',this)" title="Home">🏠</button>
@@ -748,6 +790,7 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
     <button class="sidebar-nav-item" onclick="openMyProfile()"><div class="snav-ico">👤</div> My Profile</button>
     <button class="sidebar-nav-item" onclick="openTip()"><div class="snav-ico">📬</div> Submit Tip</button>
     <button class="sidebar-nav-item" onclick="openSettings()"><div class="snav-ico">⚙️</div> Settings</button>
+    <button class="sidebar-nav-item" onclick="toggleTheme()" id="snav-theme"><div class="snav-ico" id="snav-theme-ico">🌙</div><span class="snav-lbl" id="snav-theme-lbl">Dark Mode</span></button>
     <div class="sidebar-divider" id="staff-sidebar-divider" style="display:none"></div>
     <div class="sidebar-section-lbl" id="staff-sidebar-lbl" style="display:none">Moderation</div>
     <button class="sidebar-nav-item staff-item" id="snav-staff" onclick="openStaffPanel()" style="display:none">
@@ -761,6 +804,12 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
   <main class="main-feed">
     <div style="display:none"><nav id="nav-tabs"></nav></div>
     <div id="ann-container"></div>
+    <div class="breaking-banner" id="breaking-banner">
+      <span class="breaking-banner-ico">🚨</span>
+      <span class="breaking-banner-title" id="breaking-title"></span>
+      <span class="breaking-banner-link" id="breaking-link" onclick="breakingBannerClick()">READ →</span>
+      <button class="breaking-banner-dismiss" onclick="dismissBreakingBanner()">✕</button>
+    </div>
     <div class="composer-box" id="composer-box" style="display:none">
       <div class="composer-row">
         <div class="composer-av" id="composer-av">👤</div>
@@ -792,6 +841,7 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
       </div>
     </div>
     <div id="feed"></div>
+    <button class="load-more-btn" id="load-more-btn" onclick="loadMore()">Load More Reports ↓</button>
   </main>
 
   <!-- RIGHT SIDEBAR -->
@@ -1316,12 +1366,30 @@ hr.dv{border:none;border-top:1px solid var(--border);margin:12px 0}
 <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
   <div class="mbn-inner">
     <button class="mbn-btn active" id="mbn-home" onclick="mbnSwitch('home',this)"><span class="mbn-ico">🏠</span><span class="mbn-lbl">HOME</span></button>
-    <button class="mbn-btn" id="mbn-trending" onclick="mbnSwitch('trending',this)"><span class="mbn-ico">🔥</span><span class="mbn-lbl">TRENDING</span></button>
+    <button class="mbn-btn" id="mbn-trending" onclick="mbnSwitch('trending',this)"><span class="mbn-ico">🔥</span><span class="mbn-lbl">HOT</span></button>
     <button class="mbn-add-btn" onclick="openNew()"><div class="mbn-add-inner">⚑</div></button>
+    <button class="mbn-btn" id="mbn-sort" onclick="mbnOpenSort()"><span class="mbn-ico">⇅</span><span class="mbn-lbl">SORT</span></button>
     <button class="mbn-btn" id="mbn-notif" onclick="toggleNotifPanel()"><span class="mbn-ico">🔔</span><span class="mbn-lbl">ALERTS</span><span class="mbn-badge" id="mbn-notif-badge">0</span></button>
     <button class="mbn-btn" id="mbn-menu" onclick="toggleMobileMenu()"><span class="mbn-ico">☰</span><span class="mbn-lbl">MENU</span></button>
   </div>
 </nav>
+
+<!-- MOBILE SORT BOTTOM SHEET -->
+<div class="overlay" id="m-mob-sort">
+  <div class="modal" style="max-width:100%;border-radius:12px 12px 0 0;padding-bottom:env(safe-area-inset-bottom,0)">
+    <div class="mhead">
+      <span style="font-size:18px">⇅</span>
+      <h3>Sort Reports</h3>
+      <button class="mclose" onclick="close_('m-mob-sort')">✕</button>
+    </div>
+    <div class="mbody">
+      <button class="mob-sort-btn" data-sort="newest" onclick="mbnSetSort('newest')">🕐 Newest First</button>
+      <button class="mob-sort-btn" data-sort="votes" onclick="mbnSetSort('votes')">👍 Most Voted</button>
+      <button class="mob-sort-btn" data-sort="comments" onclick="mbnSetSort('comments')">💬 Most Discussed</button>
+      <button class="mob-sort-btn" data-sort="urgent" onclick="mbnSetSort('urgent')">🚨 Urgent First</button>
+    </div>
+  </div>
+</div>
 
 <!-- MOBILE SLIDE-UP MENU -->
 <div class="overlay" id="m-mobile-menu" onclick="if(event.target===this)close_('m-mobile-menu')">
