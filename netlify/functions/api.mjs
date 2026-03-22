@@ -1,43 +1,20 @@
-/**
- * ═══════════════════════════════════════════════════════════════
- *  SENTINEL — Netlify Serverless API  (FIXED + UPGRADED v2.2)
- *
- *  FIXES applied vs original:
- *   1. bcryptjs added to package.json  → kills the 502 Bad Gateway
- *   2. CORS locked to production domain → was wildcard "*"
- *   3. DEFAULT_PASS read from env var   → was hardcoded in source
- *   4. All Supabase errors now returned → silent failures fixed
- *   5. Tip AI-triage endpoint added     → /api/ai-triage
- *   6. Retry logic on DB reads          → flaky cold-start resilience
- *   7. Error catch wraps every DB op    → 500 instead of silent crash
- * ═══════════════════════════════════════════════════════════════
- */
-
 import { createClient } from "@supabase/supabase-js";
-import { createHash }   from "crypto";
-import bcrypt           from "bcryptjs";
+import { createHash } from "crypto";
+import bcrypt from "bcryptjs";
 
-// ── Supabase client ────────────────────────────────────────────
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-// ── CORS: locked to your production domain ─────────────────────
-// FIX: was "Access-Control-Allow-Origin": "*" — any site could
-// call your API. Lock it to your Netlify domain.
-const ORIGIN = process.env.ALLOWED_ORIGIN || "https://sentinelexpose.netlify.app";
 const CORS = {
   "Content-Type": "application/json",
-  "Access-Control-Allow-Origin":  ORIGIN,
+  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-// ── Dev passkey: read from env, never hardcode ─────────────────
-// FIX: was const DEFAULT_PASS = "sentinel2024" hardcoded in source.
-// Set SENTINEL_DEV_PASSKEY in Netlify environment variables.
-const DEFAULT_PASS = process.env.SENTINEL_DEV_PASSKEY || "CHANGE_ME_IN_ENV";
+const DEFAULT_PASS = "sentinel2024";
 
 const DEFAULT_CATS = [
   { id: "government", label: "GOVERNMENT",       icon: "🏛"  },
@@ -50,40 +27,45 @@ const DEFAULT_CATS = [
 
 const ROLES = ["citizen", "reporter", "staff", "developer"];
 
-// ── Helpers ────────────────────────────────────────────────────
 function sanitize(str) {
   if (str == null) return "";
   return String(str)
-    .replace(/&/g,  "&amp;")
-    .replace(/</g,  "&lt;")
-    .replace(/>/g,  "&gt;")
-    .replace(/"/g,  "&quot;")
-    .replace(/'/g,  "&#x27;")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
     .replace(/\//g, "&#x2F;");
 }
 
 function legacyHashPw(pw) {
   return createHash("sha256").update("sentinel_s4lt_" + pw).digest("hex");
 }
+
 function isLegacyHash(hash) {
   return hash && hash.length === 64 && /^[a-f0-9]+$/.test(hash);
 }
-async function hashPw(pw)         { return bcrypt.hash(pw, 12); }
-async function checkPw(pw, hash)  {
+
+async function hashPw(pw) {
+  return bcrypt.hash(pw, 12);
+}
+
+async function checkPw(pw, hash) {
   if (isLegacyHash(hash)) return legacyHashPw(pw) === hash;
   return bcrypt.compare(pw, hash);
 }
 
 function genId() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID)
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  }
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-// ── In-memory rate limiter ─────────────────────────────────────
 const RATE_LIMIT = new Map();
+
 function rateLimit(key, max = 30, windowMs = 60000) {
-  const now   = Date.now();
+  const now = Date.now();
   const entry = RATE_LIMIT.get(key);
   if (!entry || now - entry.start > windowMs) {
     RATE_LIMIT.set(key, { count: 1, start: now });
@@ -93,24 +75,24 @@ function rateLimit(key, max = 30, windowMs = 60000) {
   entry.count++;
   return true;
 }
-setInterval(() => {
+
+function cleanOldRateLimits() {
   const now = Date.now();
-  for (const [k, v] of RATE_LIMIT)
-    if (now - v.start > 120000) RATE_LIMIT.delete(k);
-}, 60000);
-
-// ── Response helpers ───────────────────────────────────────────
-const ok  = (d = {})            => new Response(JSON.stringify({ ok: true,  ...d }), { status: 200, headers: CORS });
-const err = (msg, status = 400) => new Response(JSON.stringify({ ok: false, error: sanitize(msg) }), { status, headers: CORS });
-
-// ── Settings helpers ───────────────────────────────────────────
-async function getSetting(key, fallback = null) {
-  try {
-    const { data } = await supabase.from("settings").select("value").eq("key", key).single();
-    if (!data) return fallback;
-    return data.value?.val !== undefined ? data.value.val : data.value;
-  } catch { return fallback; }
+  for (const [key, entry] of RATE_LIMIT) {
+    if (now - entry.start > 120000) RATE_LIMIT.delete(key);
+  }
 }
+setInterval(cleanOldRateLimits, 60000);
+
+const ok  = (d = {})          => new Response(JSON.stringify({ ok: true,  ...d }), { status: 200, headers: CORS });
+const err = (msg, status=400) => new Response(JSON.stringify({ ok: false, error: sanitize(msg) }), { status, headers: CORS });
+
+async function getSetting(key, fallback = null) {
+  const { data } = await supabase.from("settings").select("value").eq("key", key).single();
+  if (!data) return fallback;
+  return data.value?.val !== undefined ? data.value.val : data.value;
+}
+
 async function setSetting(key, value) {
   const stored = (typeof value === "object" && value !== null) ? value : { val: value };
   await supabase.from("settings").upsert(
@@ -118,38 +100,35 @@ async function setSetting(key, value) {
     { onConflict: "key" }
   );
 }
+
 async function getAllSettings() {
-  try {
-    const { data } = await supabase.from("settings").select("key, value");
-    const result = {};
-    (data || []).forEach(row => {
-      result[row.key] = row.value?.val !== undefined ? row.value.val : row.value;
-    });
-    return result;
-  } catch { return {}; }
+  const { data } = await supabase.from("settings").select("key, value");
+  const result = {};
+  (data || []).forEach(row => {
+    result[row.key] = row.value?.val !== undefined ? row.value.val : row.value;
+  });
+  return result;
 }
 
-// ── Activity log ───────────────────────────────────────────────
 async function addLog(action, detail) {
   try {
     await supabase.from("activity_log").insert({
       action: sanitize(action),
-      detail: sanitize(detail),
+      detail: sanitize(detail)
     });
   } catch (e) {
     console.error("[sentinel-log]", e.message);
   }
 }
 
-// ── Safe object mappers ────────────────────────────────────────
 function safePendingUser(u) {
   if (!u) return null;
   return {
-    username:    sanitize(u.username    || ""),
+    username:    sanitize(u.username || ""),
     displayName: sanitize(u.display_name || u.username || ""),
     avatarEmoji: sanitize(u.avatar_emoji || "👤"),
-    reason:      sanitize(u.reason      || ""),
-    realName:    sanitize(u.real_name   || ""),
+    reason:      sanitize(u.reason || ""),
+    realName:    sanitize(u.real_name || ""),
     createdAt:   u.created_at,
   };
 }
@@ -157,13 +136,13 @@ function safePendingUser(u) {
 function safeUser(u) {
   if (!u) return null;
   return {
-    username:    sanitize(u.username    || ""),
+    username:    sanitize(u.username || ""),
     displayName: sanitize(u.display_name || u.username || ""),
-    role:        sanitize(u.role        || "citizen"),
+    role:        sanitize(u.role || "citizen"),
     avatarEmoji: sanitize(u.avatar_emoji || "👤"),
     avatarImage: u.avatar_image || "",
     avatarUrl:   u.avatar_url   || null,
-    bio:         sanitize(u.bio         || ""),
+    bio:         sanitize(u.bio || ""),
     bannerColor: sanitize(u.banner_color || "#0d4a6b"),
     createdAt:   u.created_at,
     approved:    u.approved !== false,
@@ -177,34 +156,29 @@ function mapPost(p) {
     content:        sanitize(p.content),
     category:       sanitize(p.category),
     urgency:        sanitize(p.urgency),
-    officials:      sanitize(p.officials  || ""),
-    location:       sanitize(p.location   || ""),
-    tags:           (p.tags  || []).map(t => sanitize(String(t))).slice(0, 10),
-    media:          p.media  || [],
+    officials:      sanitize(p.officials || ""),
+    location:       sanitize(p.location || ""),
+    tags:           (p.tags || []).map(t => sanitize(String(t))).slice(0, 10),
+    media:          p.media || [],
     anonymous:      !!p.anonymous,
     author:         sanitize(p.author),
     displayName:    sanitize(p.display_name),
     authorUsername: sanitize(p.author_username),
-    votes:          p.votes  || 0,
+    votes:          p.votes || 0,
     status:         sanitize(p.status),
     pinned:         !!p.pinned,
     locked:         !!p.locked,
     statusHistory:  (p.status_history || []).map(h => ({
-      status:    sanitize(h.status),
+      status: sanitize(h.status),
       timestamp: h.timestamp,
     })),
-    fromTip:       !!p.from_tip,
-    claimedFull:   !!p.claimed_full,
-    coClaimed:     !!p.co_claimed,
-    coClaimedBy:   sanitize(p.co_claimed_by || ""),
-    editedByAdmin: !!p.edited_by_admin,
-    editedAt:      p.edited_at,
-    timestamp:     p.timestamp,
-    // AI triage fields (populated after tip submission)
-    aiUrgency:     p.ai_urgency    || null,
-    aiCredibility: p.ai_credibility || null,
-    aiSummary:     sanitize(p.ai_summary || ""),
-    aiFlags:       p.ai_flags      || [],
+    fromTip:        !!p.from_tip,
+    claimedFull:    !!p.claimed_full,
+    coClaimed:      !!p.co_claimed,
+    coClaimedBy:    sanitize(p.co_claimed_by || ""),
+    editedByAdmin:  !!p.edited_by_admin,
+    editedAt:       p.edited_at,
+    timestamp:      p.timestamp,
   };
 }
 
@@ -221,79 +195,15 @@ function mapComment(c) {
   };
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  NEW: AI Triage via Anthropic API
-//  Analyzes a tip and returns urgency, credibility, flags, summary.
-//  Called server-side on tip submission so the key never hits the browser.
-// ══════════════════════════════════════════════════════════════════
-async function runAiTriage(title, description, category) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null; // graceful if key not set
-
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method:  "POST",
-      headers: {
-        "Content-Type":      "application/json",
-        "x-api-key":         apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model:      "claude-sonnet-4-20250514",
-        max_tokens: 400,
-        messages: [{
-          role:    "user",
-          content: `You are a moderation assistant for Sentinel, a Filipino community watchdog platform. Analyze this tip and return ONLY a valid JSON object — no markdown, no explanation.
-
-JSON format:
-{
-  "urgency": "low" | "medium" | "high" | "critical",
-  "credibility": 0-100,
-  "category_match": true | false,
-  "flags": ["spam", "duplicate", "graphic", "false_info", "needs_verification"] (array, may be empty),
-  "summary": "one sentence in plain English",
-  "recommended_action": "post" | "review" | "dismiss"
-}
-
-Tip category: ${sanitize(category)}
-Tip title: ${sanitize(title)}
-Tip description: ${sanitize(description).slice(0, 1000)}`
-        }],
-      }),
-    });
-
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.content?.find(b => b.type === "text")?.text || "";
-    const parsed = JSON.parse(text.trim());
-    return {
-      urgency:           parsed.urgency           || "low",
-      credibility:       parsed.credibility       || 50,
-      flags:             parsed.flags             || [],
-      summary:           parsed.summary           || "",
-      recommendedAction: parsed.recommended_action || "review",
-    };
-  } catch (e) {
-    console.error("[sentinel-ai-triage]", e.message);
-    return null;
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  MAIN HANDLER
-// ══════════════════════════════════════════════════════════════════
 export default async (req) => {
   if (req.method === "OPTIONS") return new Response("", { status: 200, headers: CORS });
 
   const url   = new URL(req.url);
   const route = url.pathname.replace(/^\/api\/?/, "").split("?")[0];
-  const ip    = req.headers.get("cf-connecting-ip")
-             || req.headers.get("x-forwarded-for")
-             || "unknown";
+  const ip    = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "unknown";
 
   try {
 
-    // ── GET /api/data ─────────────────────────────────────────────
     if (req.method === "GET" && route === "data") {
       if (!rateLimit("data_" + ip, 60, 60000)) return err("Too many requests", 429);
 
@@ -301,19 +211,18 @@ export default async (req) => {
       const DEFAULT_REACTIONS = ["👍","❤️","😮","😡","😢"];
 
       if (settings.maintenance) {
-        const { data: cats } = await supabase.from("categories").select("*").order("sort_order");
+        const { data: cats } = await supabase
+          .from("categories").select("*").order("sort_order");
         return ok({
-          maintenance:    true,
-          maintenanceMsg: settings.maintenanceMsg || "System under maintenance.",
+          maintenance:     true,
+          maintenanceMsg:  settings.maintenanceMsg || "System under maintenance.",
           posts: [], comments: [], announcements: [],
-          categories:     cats || DEFAULT_CATS,
-          reactions:      {},
+          categories:      cats || DEFAULT_CATS,
+          reactions:       {},
           customReactions: settings.customReactions || DEFAULT_REACTIONS,
         });
       }
 
-      // FIX: wrap in try/catch — any single table failure used to crash
-      // the entire function with no error returned to the client.
       const [postsRes, commentsRes, annsRes, catsRes, reactionsRes] = await Promise.all([
         supabase.from("posts").select("*").order("pinned", { ascending: false }).order("timestamp", { ascending: false }),
         supabase.from("comments").select("*").order("timestamp", { ascending: true }),
@@ -321,13 +230,6 @@ export default async (req) => {
         supabase.from("categories").select("*").order("sort_order"),
         supabase.from("reactions").select("post_id, emoji, username"),
       ]);
-
-      // FIX: log any per-table error rather than swallowing it
-      if (postsRes.error)     console.error("[sentinel] posts error:",     postsRes.error.message);
-      if (commentsRes.error)  console.error("[sentinel] comments error:",  commentsRes.error.message);
-      if (annsRes.error)      console.error("[sentinel] anns error:",      annsRes.error.message);
-      if (catsRes.error)      console.error("[sentinel] cats error:",      catsRes.error.message);
-      if (reactionsRes.error) console.error("[sentinel] reactions error:", reactionsRes.error.message);
 
       const reactions = {};
       (reactionsRes.data || []).forEach(r => {
@@ -344,20 +246,19 @@ export default async (req) => {
           title:   sanitize(a.title),
           content: sanitize(a.content),
         })),
-        categories:      catsRes.data      || DEFAULT_CATS,
+        categories:      (catsRes.data     || DEFAULT_CATS),
         reactions,
         hasCustomPasskey: !!(settings.passkey),
         customReactions:  settings.customReactions || DEFAULT_REACTIONS,
       });
     }
 
-    // ── GET /api/profile/:username ────────────────────────────────
     if (req.method === "GET" && route.startsWith("profile/")) {
       if (!rateLimit("profile_" + ip, 30, 60000)) return err("Too many requests", 429);
       const uname = sanitize(route.replace("profile/", "")).toLowerCase();
-      const { data: user, error: userErr } = await supabase
+      const { data: user } = await supabase
         .from("users").select("*").eq("username", uname).single();
-      if (userErr || !user) return err("User not found", 404);
+      if (!user) return err("User not found", 404);
 
       const { data: posts } = await supabase
         .from("posts")
@@ -366,32 +267,34 @@ export default async (req) => {
         .eq("anonymous", false)
         .order("timestamp", { ascending: false });
 
-      return ok({
-        user:      safeUser(user),
-        posts:     (posts || []).map(p => ({
-          ...p, title: sanitize(p.title), category: sanitize(p.category),
-        })),
-        postCount: (posts || []).length,
-      });
+      return ok({ user: safeUser(user), posts: (posts || []).map(p => ({
+        ...p,
+        title: sanitize(p.title),
+        category: sanitize(p.category),
+      })), postCount: (posts || []).length });
     }
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
 
-    // ── POST /api/auth ────────────────────────────────────────────
     if (route === "auth") {
       const { action, username, password } = body;
-      if (!rateLimit("auth_" + ip, 10, 60000)) return err("Too many requests. Wait a minute.", 429);
+      const ipKey = "auth_" + ip;
+      if (!rateLimit(ipKey, 10, 60000)) return err("Too many requests. Wait a minute.", 429);
+
       if (!username || !password) return err("Username and password required");
       const uname = sanitize(username.trim().toLowerCase());
 
       if (action === "register") {
-        if (uname.length < 3)               return err("Username must be at least 3 characters");
-        if (password.length < 6)            return err("Password must be at least 6 characters");
-        if (!/^[a-z0-9_.-]+$/.test(uname))  return err("Username: letters, numbers, _ . - only");
+        if (uname.length < 3)              return err("Username must be at least 3 characters");
+        if (password.length < 6)           return err("Password must be at least 6 characters");
+        if (!/^[a-z0-9_.-]+$/.test(uname)) return err("Username: letters, numbers, _ . - only");
 
-        const { data: existingUser }    = await supabase.from("users").select("username").eq("username", uname).single();
+        const { data: existingUser } = await supabase
+          .from("users").select("username").eq("username", uname).single();
         if (existingUser) return err("Username already taken");
-        const { data: existingPending } = await supabase.from("pending_users").select("username").eq("username", uname).single();
+
+        const { data: existingPending } = await supabase
+          .from("pending_users").select("username").eq("username", uname).single();
         if (existingPending) return err("Username already pending approval");
 
         const { reason, realName, avatarEmoji } = body;
@@ -405,20 +308,24 @@ export default async (req) => {
           real_name:     sanitize((realName || "").trim()),
           avatar_emoji:  sanitize(avatarEmoji || "👤"),
         });
-        if (insertErr) return err("Registration failed: " + insertErr.message);
+        if (insertErr) return err("Registration failed");
         await addLog("REGISTER_PENDING", `New pending registration: ${uname}`);
         return ok({ pending: true });
       }
 
       if (action === "login") {
-        const { data: user } = await supabase.from("users").select("*").eq("username", uname).single();
-        if (!user || !(await checkPw(password, user.password_hash))) return err("Invalid username or password");
+        const { data: user } = await supabase
+          .from("users").select("*").eq("username", uname).single();
+        if (!user || !(await checkPw(password, user.password_hash))) {
+          return err("Invalid username or password");
+        }
         if (user.approved === false) return err("Your account is pending approval by staff.");
 
-        // Migrate legacy SHA-256 hash to bcrypt on next login
         if (isLegacyHash(user.password_hash)) {
           const newHash = await hashPw(password);
-          await supabase.from("users").update({ password_hash: newHash }).eq("username", uname);
+          await supabase.from("users")
+            .update({ password_hash: newHash })
+            .eq("username", uname);
           user.password_hash = newHash;
         }
 
@@ -427,10 +334,14 @@ export default async (req) => {
       }
 
       if (action === "updateProfile") {
-        const { data: user } = await supabase.from("users").select("*").eq("username", uname).single();
+        const { data: user } = await supabase
+          .from("users").select("*").eq("username", uname).single();
         if (!user) return err("User not found");
+
         const skipPw = password === "__skip__" || password === "__profile_only__";
-        if (!skipPw && !(await checkPw(password, user.password_hash))) return err("Current password is incorrect");
+        if (!skipPw && !(await checkPw(password, user.password_hash))) {
+          return err("Current password is incorrect");
+        }
 
         const { displayName, bio, avatarEmoji, avatarUrl, avatarImage, bannerColor, newPassword } = body;
         const updates = { needs_profile_update: false };
@@ -448,26 +359,28 @@ export default async (req) => {
           updates.password_hash = await hashPw(newPassword);
         }
 
-        const { data: updated, error: updErr } = await supabase
+        const { data: updated } = await supabase
           .from("users").update(updates).eq("username", uname).select().single();
-        if (updErr) return err("Profile update failed: " + updErr.message);
         await addLog("UPDATE_PROFILE", uname);
         return ok(safeUser(updated));
       }
 
       if (action === "changePassword") {
-        const { data: user } = await supabase.from("users").select("*").eq("username", uname).single();
+        const { data: user } = await supabase
+          .from("users").select("*").eq("username", uname).single();
         if (!user) return err("User not found");
         if (!(await checkPw(password, user.password_hash))) return err("Current password is incorrect");
         const { newPassword } = body;
         if (!newPassword || newPassword.length < 6) return err("New password must be at least 6 characters");
-        await supabase.from("users").update({ password_hash: await hashPw(newPassword) }).eq("username", uname);
+        await supabase.from("users")
+          .update({ password_hash: await hashPw(newPassword) }).eq("username", uname);
         await addLog("PASSWORD_CHANGE", uname);
         return ok({ message: "Password changed" });
       }
 
       if (action === "changeUsername") {
-        const { data: user } = await supabase.from("users").select("*").eq("username", uname).single();
+        const { data: user } = await supabase
+          .from("users").select("*").eq("username", uname).single();
         if (!user) return err("User not found");
         if (!(await checkPw(password, user.password_hash))) return err("Current password is incorrect");
 
@@ -476,7 +389,8 @@ export default async (req) => {
         if (!/^[a-z0-9_.-]+$/.test(newUsername))   return err("Username: letters, numbers, _ . - only");
         if (newUsername === uname) return err("New username is the same as current");
 
-        const { data: taken } = await supabase.from("users").select("username").eq("username", newUsername).single();
+        const { data: taken } = await supabase
+          .from("users").select("username").eq("username", newUsername).single();
         if (taken) return err("Username already taken");
 
         await supabase.from("posts").update({ author_username: newUsername }).eq("author_username", uname);
@@ -491,23 +405,21 @@ export default async (req) => {
       return err("Unknown auth action");
     }
 
-    // ── POST /api/posts ───────────────────────────────────────────
     if (route === "posts") {
       if (!rateLimit("posts_" + ip, 5, 60000)) return err("Too many posts. Wait a minute.", 429);
-      if (!body.title || !body.content)        return err("Title and content required");
-
+      if (!body.title || !body.content) return err("Title and content required");
       const post = {
         id:              genId(),
         title:           sanitize(body.title.trim().slice(0, 200)),
         content:         sanitize(body.content.trim()),
-        category:        sanitize(body.category  || "other"),
-        urgency:         sanitize(body.urgency   || "low"),
+        category:        sanitize(body.category || "other"),
+        urgency:         sanitize(body.urgency  || "low"),
         officials:       sanitize((body.officials || "").trim().slice(0, 200)),
         location:        sanitize((body.location  || "").trim().slice(0, 100)),
-        tags:            (body.tags  || []).slice(0, 10).map(t => sanitize(String(t).slice(0, 30))),
+        tags:            (body.tags || []).slice(0, 10).map(t => sanitize(String(t).slice(0, 30))),
         media:           (body.media || []).slice(0, 5),
         anonymous:       !!body.anonymous,
-        author:          sanitize(body.author    || "Anonymous"),
+        author:          sanitize(body.author || "Anonymous"),
         display_name:    sanitize(body.displayName || body.author || "Anonymous"),
         author_username: body.authorUsername ? sanitize(body.authorUsername) : null,
         votes:           0,
@@ -517,35 +429,30 @@ export default async (req) => {
         status_history:  [{ status: "unverified", timestamp: new Date().toISOString() }],
         timestamp:       new Date().toISOString(),
       };
-
       const { error: insertErr } = await supabase.from("posts").insert(post);
-      if (insertErr) return err("Failed to create post: " + insertErr.message);
+      if (insertErr) return err("Failed to create post");
       await addLog("NEW_POST", post.title);
       return ok({ id: post.id });
     }
 
-    // ── POST /api/comments ────────────────────────────────────────
     if (route === "comments") {
       if (!rateLimit("cmts_" + ip, 10, 60000)) return err("Too many comments. Wait.", 429);
-      if (!body.postId || !body.text)           return err("postId and text required");
-
+      if (!body.postId || !body.text) return err("postId and text required");
       const cmt = {
         id:              genId(),
         post_id:         sanitize(body.postId),
         text:            sanitize(body.text.trim().slice(0, 2000)),
         anonymous:       !!body.anonymous,
-        author:          sanitize(body.author     || "Anonymous"),
+        author:          sanitize(body.author || "Anonymous"),
         display_name:    sanitize(body.displayName || body.author || "Anonymous"),
         author_username: body.authorUsername ? sanitize(body.authorUsername) : null,
         timestamp:       new Date().toISOString(),
       };
-
       const { error: insertErr } = await supabase.from("comments").insert(cmt);
-      if (insertErr) return err("Failed to post comment: " + insertErr.message);
+      if (insertErr) return err("Failed to post comment");
       return ok({ id: cmt.id });
     }
 
-    // ── POST /api/votes ───────────────────────────────────────────
     if (route === "votes") {
       const { postId, delta } = body;
       if (!postId) return err("postId required");
@@ -554,18 +461,17 @@ export default async (req) => {
         p_post_id: sanitize(postId),
         p_delta:   safeDelta,
       });
-      if (rpcErr) return err("Vote failed: " + rpcErr.message);
+      if (rpcErr) return err("Vote failed");
       return ok({ votes: data });
     }
 
-    // ── POST /api/reactions ───────────────────────────────────────
     if (route === "reactions") {
       if (!rateLimit("reactions_" + ip, 20, 60000)) return err("Too many reactions", 429);
       const { postId, emoji, username } = body;
       if (!postId || !emoji || !username) return err("postId, emoji, username required");
 
-      const safePostId   = sanitize(postId);
-      const safeEmoji    = sanitize(emoji.slice(0, 8));
+      const safePostId = sanitize(postId);
+      const safeEmoji = sanitize(emoji.slice(0, 8));
       const safeUsername = sanitize(username);
 
       const customReactions = await getSetting("customReactions", ["👍","❤️","😮","😡","😢"]);
@@ -573,20 +479,26 @@ export default async (req) => {
       if (!VALID.includes(safeEmoji)) return err("Invalid reaction");
 
       const { data: existing } = await supabase
-        .from("reactions").select("emoji")
-        .eq("post_id", safePostId).eq("username", safeUsername).single();
+        .from("reactions")
+        .select("emoji")
+        .eq("post_id", safePostId)
+        .eq("username", safeUsername)
+        .single();
 
       if (existing) {
         if (existing.emoji === safeEmoji) {
-          await supabase.from("reactions").delete().eq("post_id", safePostId).eq("username", safeUsername);
+          await supabase.from("reactions")
+            .delete().eq("post_id", safePostId).eq("username", safeUsername);
         } else {
-          await supabase.from("reactions").update({ emoji: safeEmoji }).eq("post_id", safePostId).eq("username", safeUsername);
+          await supabase.from("reactions")
+            .update({ emoji: safeEmoji }).eq("post_id", safePostId).eq("username", safeUsername);
         }
       } else {
         await supabase.from("reactions").insert({ post_id: safePostId, username: safeUsername, emoji: safeEmoji });
       }
 
-      const { data: rows } = await supabase.from("reactions").select("emoji, username").eq("post_id", safePostId);
+      const { data: rows } = await supabase
+        .from("reactions").select("emoji, username").eq("post_id", safePostId);
       const result = {};
       (rows || []).forEach(r => {
         if (!result[r.emoji]) result[r.emoji] = [];
@@ -595,71 +507,33 @@ export default async (req) => {
       return ok({ reactions: result });
     }
 
-    // ── POST /api/flag ────────────────────────────────────────────
     if (route === "flag") {
       await addLog("FLAG", sanitize(body.id || "unknown"));
       return ok();
     }
 
-    // ── POST /api/tips ────────────────────────────────────────────
-    // NEW: runs AI triage automatically on every submission
     if (route === "tips") {
       if (!rateLimit("tips_" + ip, 3, 60000)) return err("Too many tips. Wait.", 429);
-      if (!body.title || !body.description)   return err("Title and description required");
-
-      const title       = sanitize(body.title.trim().slice(0, 200));
-      const description = sanitize(body.description.trim());
-      const category    = sanitize(body.category || "other");
-      const urgency     = sanitize(body.urgency  || "low");
-
-      // Run AI triage in parallel — non-blocking, fails gracefully
-      const [, aiResult] = await Promise.allSettled([
-        Promise.resolve(), // placeholder
-        runAiTriage(title, description, category),
-      ]);
-      const ai = aiResult.status === "fulfilled" ? aiResult.value : null;
-
+      if (!body.title || !body.description) return err("Title and description required");
       const { error: insertErr } = await supabase.from("tips").insert({
-        id:              genId(),
-        title,
-        description,
-        category,
-        urgency:         ai?.urgency || urgency,
-        contact:         sanitize((body.contact || "").trim()),
-        status:          "pending",
-        // AI triage results stored on the tip row
-        ai_urgency:      ai?.urgency      || null,
-        ai_credibility:  ai?.credibility  || null,
-        ai_summary:      ai?.summary      || null,
-        ai_flags:        ai?.flags        || [],
-        ai_recommended:  ai?.recommendedAction || null,
+        id:          genId(),
+        title:       sanitize(body.title.trim().slice(0, 200)),
+        description: sanitize(body.description.trim()),
+        category:    sanitize(body.category || "other"),
+        urgency:     sanitize(body.urgency  || "low"),
+        contact:     sanitize((body.contact || "").trim()),
+        status:      "pending",
       });
-
-      if (insertErr) return err("Failed to submit tip: " + insertErr.message);
-      await addLog("TIP_RECEIVED", title + (ai ? ` [AI: ${ai.urgency}, ${ai.credibility}% credible]` : ""));
-      return ok({ aiSummary: ai?.summary || null });
+      if (insertErr) return err("Failed to submit tip");
+      await addLog("TIP_RECEIVED", sanitize(body.title));
+      return ok();
     }
 
-    // ── POST /api/ai-triage (manual re-triage from Staff Panel) ──
-    if (route === "ai-triage") {
-      if (!rateLimit("aitriage_" + ip, 10, 60000)) return err("Too many requests", 429);
-      const { title, description, category, passkey } = body;
-      if (!title || !description) return err("title and description required");
-
-      // Require staff passkey for manual re-triage
-      const validKey = (await getSetting("passkey")) || DEFAULT_PASS;
-      if (passkey !== validKey) return err("Invalid passkey", 401);
-
-      const ai = await runAiTriage(title, description, category || "other");
-      if (!ai) return err("AI triage unavailable", 503);
-      return ok(ai);
-    }
-
-    // ── POST /api/staff ───────────────────────────────────────────
     if (route === "staff") {
       const { action, username, data: sdata = {} } = body;
       if (!username) return err("username required");
       const safeUname = sanitize(username.toLowerCase());
+
       if (!rateLimit("staff_" + safeUname, 30, 60000)) return err("Rate limited", 429);
 
       const { data: caller } = await supabase
@@ -669,60 +543,74 @@ export default async (req) => {
       if (callerRole !== "staff" && callerRole !== "developer") return err("Staff or developer role required", 403);
 
       switch (action) {
+
         case "status": {
-          const { data: post } = await supabase.from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
+          const { data: post } = await supabase
+            .from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
           if (!post) return err("Post not found");
           const history = [...(post.status_history || []), { status: sanitize(sdata.status), timestamp: new Date().toISOString() }];
-          await supabase.from("posts").update({ status: sanitize(sdata.status), status_history: history }).eq("id", sanitize(sdata.id));
+          await supabase.from("posts")
+            .update({ status: sanitize(sdata.status), status_history: history }).eq("id", sanitize(sdata.id));
           await addLog("STAFF_STATUS", `"${sanitize(post.title)}" → ${sanitize(sdata.status)} by ${safeUname}`);
           break;
         }
+
         case "verify": {
-          const { data: post } = await supabase.from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
+          const { data: post } = await supabase
+            .from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
           if (!post) return err("Post not found");
           const history = [...(post.status_history || []), { status: "verified", timestamp: new Date().toISOString() }];
           await supabase.from("posts").update({ status: "verified", status_history: history }).eq("id", sanitize(sdata.id));
           await addLog("STAFF_VERIFY", `"${sanitize(post.title)}" by ${safeUname}`);
           break;
         }
+
         case "review": {
-          const { data: post } = await supabase.from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
+          const { data: post } = await supabase
+            .from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
           if (!post) return err("Post not found");
           const history = [...(post.status_history || []), { status: "reviewing", timestamp: new Date().toISOString() }];
           await supabase.from("posts").update({ status: "reviewing", status_history: history }).eq("id", sanitize(sdata.id));
           await addLog("STAFF_REVIEW", `"${sanitize(post.title)}" by ${safeUname}`);
           break;
         }
+
         case "unverify": {
-          const { data: post } = await supabase.from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
+          const { data: post } = await supabase
+            .from("posts").select("status_history, title").eq("id", sanitize(sdata.id)).single();
           if (!post) return err("Post not found");
           const history = [...(post.status_history || []), { status: "unverified", timestamp: new Date().toISOString() }];
           await supabase.from("posts").update({ status: "unverified", status_history: history }).eq("id", sanitize(sdata.id));
           await addLog("STAFF_UNVERIFY", `"${sanitize(post.title)}" by ${safeUname}`);
           break;
         }
+
         case "deleteComment": {
           await supabase.from("comments").delete().eq("id", sanitize(sdata.commentId));
           await addLog("STAFF_DEL_CMT", `Comment: ${sanitize(sdata.commentId)} by ${safeUname}`);
           break;
         }
+
         case "getPending": {
           const { data: pending } = await supabase.from("pending_users").select("*");
           return ok({ pending: (pending || []).map(safePendingUser) });
         }
+
         case "approveUser": {
           const allowedRoles = callerRole === "developer"
             ? ["citizen", "reporter", "staff", "developer"]
             : ["citizen", "reporter"];
           const assignRole = sanitize(sdata.role || "citizen");
           if (!allowedRoles.includes(assignRole)) return err("You cannot assign the role: " + assignRole, 403);
-          const { data: pu } = await supabase.from("pending_users").select("*").eq("username", sanitize(sdata.username)).single();
+
+          const { data: pu } = await supabase
+            .from("pending_users").select("*").eq("username", sanitize(sdata.username)).single();
           if (!pu) return err("Pending user not found");
           await supabase.from("users").insert({
             username:             sanitize(pu.username),
             display_name:         sanitize(pu.display_name),
             password_hash:        pu.password_hash,
-            avatar_emoji:         sanitize(pu.avatar_emoji || "👤"),
+            avatar_emoji:        sanitize(pu.avatar_emoji || "👤"),
             role:                 assignRole,
             approved:             true,
             needs_profile_update: true,
@@ -731,139 +619,165 @@ export default async (req) => {
           await addLog("STAFF_APPROVE", `${sanitize(pu.username)} as ${assignRole} by ${safeUname}`);
           break;
         }
+
         case "rejectUser": {
           await supabase.from("pending_users").delete().eq("username", sanitize(sdata.username));
           await addLog("STAFF_REJECT", `${sanitize(sdata.username)} by ${safeUname}`);
           break;
         }
+
         default: return err("Unknown staff action");
       }
       return ok();
     }
 
-    // ── POST /api/admin ───────────────────────────────────────────
     if (route === "admin") {
-      if (!rateLimit("admin_" + ip, 30, 60000)) return err("Rate limited", 429);
       const { passkey, action, data = {} } = body;
+      if (!rateLimit("admin_" + ip, 30, 60000)) return err("Rate limited", 429);
       const validKey = (await getSetting("passkey")) || DEFAULT_PASS;
       if (passkey !== validKey) return err("Invalid passkey", 401);
 
       const safeData = {
-        id:          sanitize(data.id),
-        ids:         (data.ids || []).map(id => sanitize(id)).filter(Boolean),
-        status:      sanitize(data.status),
-        urgency:     sanitize(data.urgency),
-        title:       sanitize(data.title),
-        content:     sanitize(data.content),
-        username:    sanitize(data.username),
-        newUsername: sanitize(data.newUsername),
-        role:        sanitize(data.role),
-        displayName: sanitize(data.displayName),
-        claimerName: sanitize(data.claimerName),
-        commentId:   sanitize(data.commentId),
-        tipId:       sanitize(data.tipId),
-        newPasskey:  data.newPasskey ? sanitize(data.newPasskey) : undefined,
-        reactions:   (data.reactions || []).map(r => sanitize(String(r).slice(0, 8))).filter(Boolean),
-        categories:  (data.categories || []).map(c => ({
-          id:    sanitize(c.id    || ""),
+        id:         sanitize(data.id),
+        ids:        (data.ids || []).map(id => sanitize(id)).filter(Boolean),
+        status:     sanitize(data.status),
+        urgency:    sanitize(data.urgency),
+        title:      sanitize(data.title),
+        content:    sanitize(data.content),
+        username:   sanitize(data.username),
+        newUsername:sanitize(data.newUsername),
+        role:       sanitize(data.role),
+        displayName:sanitize(data.displayName),
+        claimerName:sanitize(data.claimerName),
+        commentId:  sanitize(data.commentId),
+        tipId:      sanitize(data.tipId),
+        newPasskey: data.newPasskey ? sanitize(data.newPasskey) : undefined,
+        reactions:  (data.reactions || []).map(r => sanitize(String(r).slice(0, 8))).filter(Boolean),
+        categories: (data.categories || []).map(c => ({
+          id:    sanitize(c.id || ""),
           label: sanitize(c.label || ""),
-          icon:  sanitize(c.icon  || "📌"),
+          icon:  sanitize(c.icon || "📌"),
         })),
-        enabled:     !!data.enabled,
-        message:     data.message ? sanitize(data.message) : "",
-        officials:   data.officials !== undefined ? sanitize(data.officials) : undefined,
-        location:    data.location  !== undefined ? sanitize(data.location)  : undefined,
+        enabled:    !!data.enabled,
+        message:    data.message ? sanitize(data.message) : "",
       };
 
       switch (action) {
+
         case "status": {
-          const { data: post } = await supabase.from("posts").select("status_history, title").eq("id", safeData.id).single();
+          const { data: post } = await supabase
+            .from("posts").select("status_history, title").eq("id", safeData.id).single();
           if (!post) return err("Post not found");
           const history = [...(post.status_history || []), { status: safeData.status, timestamp: new Date().toISOString() }];
-          await supabase.from("posts").update({ status: safeData.status, status_history: history }).eq("id", safeData.id);
+          await supabase.from("posts")
+            .update({ status: safeData.status, status_history: history }).eq("id", safeData.id);
           await addLog("STATUS", `"${sanitize(post.title)}" → ${safeData.status}`);
           break;
         }
+
         case "urgency": {
-          const { data: post } = await supabase.from("posts").select("title").eq("id", safeData.id).single();
+          const { data: post } = await supabase
+            .from("posts").select("title").eq("id", safeData.id).single();
           if (!post) return err("Post not found");
           await supabase.from("posts").update({ urgency: safeData.urgency }).eq("id", safeData.id);
           await addLog("URGENCY", `"${sanitize(post.title)}" → ${safeData.urgency}`);
           break;
         }
+
         case "pin": case "unpin": {
-          const { data: post } = await supabase.from("posts").select("title").eq("id", safeData.id).single();
+          const { data: post } = await supabase
+            .from("posts").select("title").eq("id", safeData.id).single();
           if (!post) return err("Post not found");
           await supabase.from("posts").update({ pinned: action === "pin" }).eq("id", safeData.id);
           await addLog(action.toUpperCase(), sanitize(post.title));
           break;
         }
+
         case "lock": case "unlock": {
-          const { data: post } = await supabase.from("posts").select("title").eq("id", safeData.id).single();
+          const { data: post } = await supabase
+            .from("posts").select("title").eq("id", safeData.id).single();
           if (!post) return err("Post not found");
           await supabase.from("posts").update({ locked: action === "lock" }).eq("id", safeData.id);
           await addLog(action.toUpperCase(), sanitize(post.title));
           break;
         }
+
         case "editPost": {
           const updates = { edited_by_admin: true, edited_at: new Date().toISOString() };
-          if (safeData.title)               updates.title     = safeData.title;
-          if (safeData.content)             updates.content   = safeData.content;
+          if (safeData.title)    updates.title     = safeData.title;
+          if (safeData.content)  updates.content   = safeData.content;
           if (safeData.officials !== undefined) updates.officials = safeData.officials;
           if (safeData.location  !== undefined) updates.location  = safeData.location;
-          const { data: post } = await supabase.from("posts").update(updates).eq("id", safeData.id).select("title").single();
+          const { data: post } = await supabase
+            .from("posts").update(updates).eq("id", safeData.id).select("title").single();
           await addLog("EDIT_POST", post?.title || safeData.id);
           break;
         }
+
         case "bulkStatus": {
           if (!safeData.ids?.length) return err("No IDs provided");
           for (const id of safeData.ids) {
-            const { data: post } = await supabase.from("posts").select("status_history").eq("id", id).single();
+            const { data: post } = await supabase
+              .from("posts").select("status_history").eq("id", id).single();
             if (!post) continue;
             const history = [...(post.status_history || []), { status: safeData.status, timestamp: new Date().toISOString() }];
-            await supabase.from("posts").update({ status: safeData.status, status_history: history }).eq("id", id);
+            await supabase.from("posts")
+              .update({ status: safeData.status, status_history: history }).eq("id", id);
           }
           await addLog("BULK_STATUS", `${safeData.ids.length} posts → ${safeData.status}`);
           break;
         }
+
         case "bulkDelete": {
           if (!safeData.ids?.length) return err("No IDs provided");
           await supabase.from("posts").delete().in("id", safeData.ids);
           await addLog("BULK_DELETE", `${safeData.ids.length} posts deleted`);
           break;
         }
+
         case "unpinAll": {
           await supabase.from("posts").update({ pinned: false }).eq("pinned", true);
           await addLog("UNPIN_ALL", "All posts unpinned");
           break;
         }
+
         case "delete": {
-          const { data: post } = await supabase.from("posts").select("title").eq("id", safeData.id).single();
+          const { data: post } = await supabase
+            .from("posts").select("title").eq("id", safeData.id).single();
           await supabase.from("posts").delete().eq("id", safeData.id);
           await addLog("DELETE_POST", post?.title || safeData.id);
           break;
         }
+
         case "deleteComment": {
           await supabase.from("comments").delete().eq("id", safeData.commentId);
           await addLog("DELETE_COMMENT", `Comment: ${safeData.commentId}`);
           break;
         }
+
         case "announce": {
-          await supabase.from("announcements").insert({ title: safeData.title, content: safeData.content });
+          await supabase.from("announcements").insert({
+            title:   safeData.title,
+            content: safeData.content,
+          });
           await addLog("ANNOUNCE", safeData.title);
           break;
         }
+
         case "clearAnn": {
           await supabase.from("announcements").delete().neq("id", "00000000-0000-0000-0000-000000000000");
           await addLog("CLEAR_ANN", "All announcements cleared");
           break;
         }
+
         case "dismissAnn": {
           if (safeData.id) await supabase.from("announcements").delete().eq("id", safeData.id);
           break;
         }
+
         case "claimFull": case "claimCo": {
-          const { data: p } = await supabase.from("posts").select("title").eq("id", safeData.id).single();
+          const { data: p } = await supabase
+            .from("posts").select("title").eq("id", safeData.id).single();
           if (!p) return err("Post not found");
           const updates = action === "claimFull"
             ? { author: safeData.claimerName || "SENTINEL STAFF", display_name: safeData.claimerName || "SENTINEL STAFF", anonymous: false, claimed_full: true }
@@ -872,18 +786,21 @@ export default async (req) => {
           await addLog("CLAIM_POST", `"${sanitize(p.title)}" → ${safeData.claimerName} (${action})`);
           break;
         }
+
         case "getPending": {
           const { data: pending } = await supabase.from("pending_users").select("*");
           return ok({ pending: (pending || []).map(safePendingUser) });
         }
+
         case "approveUser": {
-          const { data: pu } = await supabase.from("pending_users").select("*").eq("username", safeData.username).single();
+          const { data: pu } = await supabase
+            .from("pending_users").select("*").eq("username", safeData.username).single();
           if (!pu) return err("Pending user not found");
           await supabase.from("users").insert({
             username:             sanitize(pu.username),
             display_name:         sanitize(pu.display_name),
             password_hash:        pu.password_hash,
-            avatar_emoji:         sanitize(pu.avatar_emoji || "👤"),
+            avatar_emoji:        sanitize(pu.avatar_emoji || "👤"),
             role:                 safeData.role || "citizen",
             approved:             true,
             needs_profile_update: true,
@@ -892,81 +809,90 @@ export default async (req) => {
           await addLog("APPROVE_USER", `${sanitize(pu.username)} as ${safeData.role || "citizen"}`);
           break;
         }
+
         case "rejectUser": {
           await supabase.from("pending_users").delete().eq("username", safeData.username);
           await addLog("REJECT_USER", safeData.username);
           break;
         }
+
         case "getAllUsers": {
           const { data: users } = await supabase.from("users").select("*");
           return ok({ users: (users || []).map(safeUser) });
         }
+
         case "setRole": {
           if (!ROLES.includes(safeData.role)) return err("Invalid role");
           await supabase.from("users").update({ role: safeData.role }).eq("username", safeData.username);
           await addLog("SET_ROLE", `${safeData.username} → ${safeData.role}`);
           break;
         }
+
         case "setDisplayName": {
           const name = (safeData.displayName || "").slice(0, 30);
           await supabase.from("users").update({ display_name: name }).eq("username", safeData.username);
           await addLog("SET_DISPLAYNAME", `${safeData.username} → ${name}`);
           break;
         }
+
         case "getTips": {
-          const { data: tips } = await supabase.from("tips").select("*").order("timestamp", { ascending: false });
+          const { data: tips } = await supabase
+            .from("tips").select("*").order("timestamp", { ascending: false });
           return ok({ tips: (tips || []).map(t => ({
             ...t,
-            title:          sanitize(t.title),
-            description:    sanitize(t.description || ""),
-            contact:        sanitize(t.contact      || ""),
-            ai_summary:     sanitize(t.ai_summary   || ""),
-            ai_flags:       t.ai_flags    || [],
+            title:       sanitize(t.title),
+            description: sanitize(t.description || ""),
+            contact:     sanitize(t.contact || ""),
           })) });
         }
+
         case "postTip": {
-          const { data: tip } = await supabase.from("tips").select("*").eq("id", safeData.tipId).single();
+          const { data: tip } = await supabase
+            .from("tips").select("*").eq("id", safeData.tipId).single();
           if (!tip) return err("Tip not found");
           const post = {
-            id:           genId(),
-            title:        sanitize(tip.title),
-            content:      sanitize(tip.description),
-            category:     sanitize(tip.category || "other"),
-            urgency:      sanitize(tip.ai_urgency || tip.urgency || "low"),
-            author:       safeData.claimerName || "SENTINEL STAFF",
+            id:          genId(),
+            title:       sanitize(tip.title),
+            content:     sanitize(tip.description),
+            category:    sanitize(tip.category || "other"),
+            urgency:     sanitize(tip.urgency  || "low"),
+            author:      safeData.claimerName || "SENTINEL STAFF",
             display_name: safeData.claimerName || "SENTINEL STAFF",
-            anonymous:    false,
-            from_tip:     true,
-            ai_summary:   tip.ai_summary || null,
-            ai_credibility: tip.ai_credibility || null,
-            votes:        0, status: "unverified", pinned: false, locked: false,
+            anonymous:   false,
+            from_tip:    true,
+            votes:       0, status: "unverified", pinned: false, locked: false,
             status_history: [{ status: "unverified", timestamp: new Date().toISOString() }],
-            timestamp:    new Date().toISOString(),
           };
           await supabase.from("posts").insert(post);
           await supabase.from("tips").update({ status: "posted" }).eq("id", safeData.tipId);
           await addLog("TIP_POSTED", sanitize(tip.title));
           return ok({ postId: post.id });
         }
+
         case "dismissTip": {
-          const { data: tip } = await supabase.from("tips").select("title").eq("id", safeData.tipId).single();
+          const { data: tip } = await supabase
+            .from("tips").select("title").eq("id", safeData.tipId).single();
           await supabase.from("tips").update({ status: "dismissed" }).eq("id", safeData.tipId);
           await addLog("TIP_DISMISSED", tip?.title || safeData.tipId);
           break;
         }
+
         case "passkey": {
           if (!safeData.newPasskey || safeData.newPasskey.length < 6) return err("Passkey must be 6+ chars");
           await setSetting("passkey", safeData.newPasskey);
           await addLog("PASSKEY_CHANGE", "Developer passkey updated");
           break;
         }
+
         case "setReactions": {
-          if (!Array.isArray(safeData.reactions) || safeData.reactions.length < 1 || safeData.reactions.length > 8)
+          if (!Array.isArray(safeData.reactions) || safeData.reactions.length < 1 || safeData.reactions.length > 8) {
             return err("reactions must be an array of 1-8 emoji");
+          }
           await setSetting("customReactions", safeData.reactions);
           await addLog("SET_REACTIONS", safeData.reactions.join(" "));
           break;
         }
+
         case "categories": {
           if (!Array.isArray(safeData.categories)) return err("Invalid categories");
           await supabase.from("categories").delete().neq("id", "__none__");
@@ -975,20 +901,25 @@ export default async (req) => {
           );
           break;
         }
+
         case "maintenance": {
           await setSetting("maintenance",    !!safeData.enabled);
           await setSetting("maintenanceMsg", safeData.message || "");
           await addLog("MAINTENANCE", safeData.enabled ? "Maintenance mode ON" : "Maintenance mode OFF");
           break;
         }
+
         case "getLog": {
           const { data: log } = await supabase
             .from("activity_log").select("*")
             .order("timestamp", { ascending: false }).limit(500);
           return ok({ log: (log || []).map(l => ({
-            ...l, action: sanitize(l.action), detail: sanitize(l.detail),
+            ...l,
+            action: sanitize(l.action),
+            detail: sanitize(l.detail),
           })) });
         }
+
         case "exportData": {
           const [postsRes, commentsRes, usersRes] = await Promise.all([
             supabase.from("posts").select("*"),
@@ -1003,6 +934,7 @@ export default async (req) => {
             exportedAt: new Date().toISOString(),
           });
         }
+
         default: return err("Unknown action");
       }
       return ok();
@@ -1011,8 +943,8 @@ export default async (req) => {
     return err("Not found", 404);
 
   } catch (e) {
-    console.error("[sentinel-api] Unhandled error:", e);
-    return err(e.message || "Internal server error", 500);
+    console.error("[sentinel-api]", e);
+    return err(e.message, 500);
   }
 };
 
